@@ -1,81 +1,90 @@
 #include <SDL.h>
 #include <stdio.h>
 #include "CF_Window.h"
-#include "CF_Controller.h"
 #include "NF_Cartridge.h"
 #include "NF_6502.h"
 #include "NF_Bus.h"
 #include "NF_Palette.h"
 
-SDL_Surface* loadedImage = NULL;
-
 bool MAIN = true;
 SDL_Event e;
 
-SDL_Surface* screenRenderer;
+// Change this to SDL_Renderer* for proper SDL rendering
+SDL_Renderer* screenRenderer;
 
 int scanline;
 int cycle;
-void receivePixel(struct NF_Pixel pxl) {
-		SDL_SetRenderDrawColor(screenRenderer, pxl.r, pxl.g, pxl.b, SDL_ALPHA_OPAQUE);
-		SDL_RenderDrawPoint(screenRenderer, pxl.x, pxl.y);
-		scanline = pxl.y;
-		cycle = pxl.x;
-}
-
-
 uint16_t startup_cycles = 0;
 bool startup_ready = false;
+
+// Create a rendering function that will plug into the emulator
+void receivePixel(struct NF_Pixel pxl) {
+    SDL_SetRenderDrawColor(screenRenderer, pxl.r, pxl.g, pxl.b, SDL_ALPHA_OPAQUE);
+    SDL_RenderDrawPoint(screenRenderer, pxl.x, pxl.y);
+    scanline = pxl.y;
+    cycle = pxl.x;
+}
 
 void quitFunc() { MAIN = false; }
 
 int main(int arc, char* args[]) {
 
-	uint8_t* rom_data = NF_readROMtoBuffer("DK.nes"); // ...Or, the legally-obtained ROM of your choice. :)
-	struct Cartridge *game_cart = NF_createCartridgeFromBuffer(rom_data);
-	struct NES_Console *console = NF_initConsole();
-	console->imageOutFunc = *receivePixel;
+    // Initialize ROM and NES
+    uint8_t* rom_data = NF_readROMtoBuffer("nestest.nes"); // Or any other legal ROM.
+    struct Cartridge* game_cart = NF_createCartridgeFromBuffer(rom_data);
+    struct NES_Console* console = NF_initConsole();
+    
+    if (console == 0) { return 1; }
 
-	NF_insertCartridge(console, game_cart);
+    console->imageOutFunc = *receivePixel;
 
+    if (NF_insertCartridge(console, game_cart) == 1) { return 1; }
 
-	CF_init("NES Emulator", 256, 240);
+    // Initialize SDL window and renderer
+    CF_init("NES Emulator", 256, 240);
 
-	screenRenderer = SDL_CreateRenderer(CF_getWindow(), -1, SDL_RENDERER_ACCELERATED);
+    // Correctly create the renderer
+    int v = SDL_Init(SDL_INIT_VIDEO);
+    screenRenderer = SDL_CreateRenderer(CF_getWindow(), -1, SDL_RENDERER_ACCELERATED);
+    if (screenRenderer == NULL) {
+        printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
+        return -1;
+    }
+    if (!screenRenderer) {
+        printf("Error: SDL_Renderer could not be created! SDL Error: %s\n", SDL_GetError());
+        return -1;
+    }
 
-	SDL_Rect slimePos;
-	slimePos.x = 20;
-	slimePos.y = 20;
+    // Set what happens when X is pressed on window
+    CF_setXFunction(quitFunc);
 
-	CF_setXFunction(&quitFunc);
-	CF_mapButton(SDL_SCANCODE_DOWN, CF_DOWN);
-	CF_mapButton(SDL_SCANCODE_A, CF_A);
+    while (MAIN) {
 
-	while (MAIN) {
+        // Look for window closing
+        while (SDL_PollEvent(&e) != NULL) { CF_handleXButtonPresses(e); }
 
-		CF_clearControllerInput();
+        // Clear the screen at the start of each frame
+        SDL_SetRenderDrawColor(screenRenderer, 0, 0, 0, SDL_ALPHA_OPAQUE);  // Clear with black
 
-		while (SDL_PollEvent(&e) != NULL) {
-			CF_handleXButtonPresses(e);
-			CF_receiveControllerInput(e);
-		}
+        // Handle startup cycles
+        startup_cycles++;
+        if (startup_cycles == 29658 && startup_ready == false) {
+            startup_ready = true;
+        }
 
-		NF_busTickMasterClock(console, startup_ready);
+        // Run the NES master clock
+        if (startup_ready) {
+            NF_busTickMasterClock(console, startup_ready);
+        }
 
-		startup_cycles++;
-		if (startup_cycles == 29658 && startup_ready == false) { 
-			startup_ready = true;
-		}
+        // Update the screen when the frame ends
+        if (scanline == 239 && cycle == 254) {
+            SDL_RenderPresent(screenRenderer);
+        }
+    }
 
-		if (scanline == 239 && cycle == 255) { 
-			SDL_RenderPresent(screenRenderer); 
-		}
+    // Clean up and exit
+    CF_exit();
 
-	}
-
-
-	CF_exit();
-
-	return 0;
-
+    return 0;
 }

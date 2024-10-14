@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "NF_Cartridge.h"
 #include <stdio.h>
 #include <malloc.h>
@@ -6,6 +8,7 @@
 #define CHR_ROM_BLOCK_SIZE 8192
 #define TRAINER_BLOCK_SIZE 512
 
+// Take byte data stored in a character array, and parse the ROM into a Cartridge structure
 struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 
 	struct Cartridge *Cart = malloc(sizeof(struct Cartridge));
@@ -25,11 +28,11 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 	Cart->prg_rom_blocks = rom_data[4];
 	Cart->chr_rom_blocks = rom_data[5];
 	Cart->flag_6 = rom_data[6];
-	Cart->nametable_mirroring = (SCROLL_MAPPING_TYPE)(rom_data[6] & 0b01000000);
+	Cart->nametable_mirroring = (rom_data[6] & 0b00000001) ? VERTICAL_MAPPING : HORIZONTAL_MAPPING;
 	Cart->flag_7 = rom_data[7];
 	Cart->has_battery = ((rom_data[6] & 0b00000010) != 0);
 	Cart->has_trainer = ((rom_data[6] & 0b00000100) != 0);
-	Cart->mapper = ((rom_data[6] & 0b00001111) & (rom_data[7] & 0b11110000));
+	Cart->mapper = (rom_data[6] >> 4) | (rom_data[7] & 0xF0);
 
 	// Check if the header is NES 2.0
 	if ((rom_data[7] & 0x0C) == 0x08) {
@@ -68,13 +71,15 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 	}
 
 	// Copy the PRG ROM and CHR ROM blocks to the cartridge object
-	memcpy(Cart->prg_rom, &rom_data[16] + ((TRAINER_BLOCK_SIZE * Cart->has_trainer) ? 1 : 0), PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks);
-	memcpy(Cart->chr_rom, &rom_data[16] + ((TRAINER_BLOCK_SIZE * Cart->has_trainer) ? 1 : 0) + PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks, CHR_ROM_BLOCK_SIZE * Cart->chr_rom_blocks);
+	memcpy(Cart->prg_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0)], PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks);
+	memcpy(Cart->chr_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0) + PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks], CHR_ROM_BLOCK_SIZE * Cart->chr_rom_blocks);
+	
 	// TO DO: Mapper 355 and 086 use Misc. ROM area following CHR ROM.
 
 	return Cart;
 }
 
+// Helper function, read contents of ROM file into character array
 uint8_t * NF_readROMtoBuffer(const char* filename) {
 	FILE* fileptr;
 	char* buffer;

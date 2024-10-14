@@ -32,5 +32,7 @@ void (*XFunctionPtr)(void) = NULL;
 void CF_setXFunction(void (*funcPtr)(void)) { XFunctionPtr = funcPtr; }
 
 void CF_handleXButtonPresses(SDL_Event e) {
-	if (e.type == SDL_QUIT) { (*XFunctionPtr)(); }
+	if (XFunctionPtr != NULL) {
+		if (e.type == SDL_QUIT) { (*XFunctionPtr)(); }
+	}
 }

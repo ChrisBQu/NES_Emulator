@@ -1,0 +1,6 @@
+﻿  NF_PPU.c
+  Source.c
+  Generating Code...
+D:\Programming\Emulator\NES_Emulator\Source.c(58,21): warning C4113: 'void (__cdecl *)()' differs in parameter lists from 'void (__cdecl *)(void)'
+D:\Programming\Emulator\NES_Emulator\Source.c(62,34): warning C4047: '!=': 'int' differs in levels of indirection from 'void *'
+  Emulator.vcxproj -> D:\Programming\Emulator\NES_Emulator\Emulator\x64\Debug\Emulator.exe

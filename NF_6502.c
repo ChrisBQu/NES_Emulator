@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Debug log
 FILE* myLog;
 
 // It is important to be able to convert an opcode (in range 0x00 to 0xff) to an opcode and an addressing mode.
@@ -59,43 +60,50 @@ ADDRESS_MODE_6502 charToAddressModeArray[256] =
 // A zero indicates that the opcode or address mode is illegal and unsupported by this implementation
 uint8_t cyclesArray[256] =
 {
-7, 6, 0, 0, 0, 3, 5, 0, 3, 2, 2, 0, 0, 4, 6, 0,
-2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-6, 6, 0, 0, 3, 3, 5, 0, 4, 2, 2, 0, 4, 4, 6, 0,
-2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-6, 6, 0, 0, 0, 3, 5, 0, 3, 2, 2, 0, 3, 4, 6, 0,
-2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-6, 6, 0, 0, 0, 2, 5, 0, 4, 3, 2, 0, 5, 4, 6, 0,
-2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-0, 6, 0, 0, 3, 3, 3, 0, 2, 0, 2, 0, 4, 4, 4, 0,
-2, 6, 0, 0, 4, 4, 4, 0, 2, 5, 2, 0, 0, 5, 0, 0,
-2, 6, 2, 0, 3, 3, 3, 0, 2, 2, 2, 0, 4, 4, 4, 0,
-0, 5, 0, 0, 4, 4, 4, 0, 2, 4, 2, 0, 4, 4, 4, 0,
-2, 6, 0, 0, 3, 3, 5, 0, 2, 2, 2, 0, 4, 4, 6, 0,
-2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-2, 6, 0, 0, 3, 3, 5, 0, 2, 2, 2, 0, 4, 4, 6, 0,
-2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0
+ // 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
+	7, 6, 0, 0, 3, 3, 5, 0, 3, 2, 2, 0, 0, 4, 6, 0, // 0
+	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0, // 1
+	6, 6, 0, 0, 3, 3, 5, 0, 4, 2, 2, 0, 4, 4, 6, 0, // 2
+	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0, // 3
+	6, 6, 0, 0, 0, 3, 5, 0, 3, 2, 2, 0, 3, 4, 6, 0, // 4
+	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0, // 5
+	6, 6, 0, 0, 0, 3, 5, 0, 4, 2, 2, 0, 5, 4, 6, 0, // 6
+	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0, // 7
+	0, 6, 0, 0, 3, 3, 3, 0, 2, 0, 2, 0, 4, 4, 4, 0, // 8
+	2, 6, 0, 0, 4, 4, 4, 0, 2, 5, 2, 0, 0, 5, 0, 0, // 9
+	2, 6, 2, 0, 3, 3, 3, 0, 2, 2, 2, 0, 4, 4, 4, 0, // A
+	2, 5, 0, 0, 4, 4, 4, 0, 2, 4, 2, 0, 4, 4, 4, 0, // B
+	2, 6, 0, 0, 3, 3, 5, 0, 2, 2, 2, 0, 4, 4, 6, 0, // C
+	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0, // D
+	2, 6, 0, 0, 3, 3, 5, 0, 2, 2, 2, 0, 4, 4, 6, 0, // E
+	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0  // F
 };
+
+
+
 
 // Initialize the CPU-> This must be called once before trying to use it
 struct Processor* NF_6502_initProcessor() {
 
-	myLog = fopen("log.txt", "w");
+	// If debugging is enabled, open a file for logging
+	if (DEBUG_ENABLED) { myLog = fopen("log.txt", "w"); }
 
 	struct Processor* newcpu = malloc(sizeof(struct Processor));
 	if (newcpu == NULL) {
 		printf("Error: Could not create 6502 Processor object. Out of memory?\n");
 		return 0;
 	}
+
 	newcpu->PC = 0x00;
 	newcpu->A = 0x00;
 	newcpu->X = 0x00;
 	newcpu->Y = 0x00;
-	newcpu->SP = 0xfd; // Not FF?
-	newcpu->P = 0x24; 
+	newcpu->SP = 0xfd;
+	newcpu->P = 0b00100100;
 	newcpu->cycles = 0;
 	newcpu->page_crossed = false;
 	return newcpu;
+
 }
 
 // Set one of the processor flags to either 0 or 1. Function exists as a convenience.
@@ -122,11 +130,9 @@ void NF_fetchData(struct Processor* CPU) {
 	switch (CPU->addr_mode) {
 	case AM_ACC:
 		CPU->fetched = CPU->A;
-		CPU->fetched_address = 0x0000; // Dummy
 		break;
 	case AM_IMM:
 		CPU->fetched = NF_readMemory(CPU->bus, CPU->PC);
-		CPU->fetched_address = CPU->PC;
 		CPU->PC++;
 		break;
 	case AM_REL:
@@ -140,7 +146,6 @@ void NF_fetchData(struct Processor* CPU) {
 		break;
 	case AM_IMP:
 		CPU->fetched = CPU->A;
-		CPU->fetched_address = 0x0000; // Dummy
 		break;
 	case AM_ZPG:
 		CPU->fetched_address = 0x00FF & NF_readMemory(CPU->bus, CPU->PC);
@@ -172,7 +177,7 @@ void NF_fetchData(struct Processor* CPU) {
 		CPU->PC++;
 		CPU->fetched_address = ((hi << 8) | lo) + CPU->X;
 		CPU->fetched = NF_readMemory(CPU->bus, CPU->fetched_address);
-		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = 0; }
+		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_ABY:
 		lo = NF_readMemory(CPU->bus, CPU->PC);
@@ -181,7 +186,7 @@ void NF_fetchData(struct Processor* CPU) {
 		CPU->PC++;
 		CPU->fetched_address = ((hi << 8) | lo) + CPU->Y;
 		CPU->fetched = NF_readMemory(CPU->bus, CPU->fetched_address);
-		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = 0; }
+		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_IND:
 		lo = NF_readMemory(CPU->bus, CPU->PC);
@@ -202,7 +207,7 @@ void NF_fetchData(struct Processor* CPU) {
 		hi = NF_readMemory(CPU->bus, (tmp + 1) & 0x00FF);
 		CPU->fetched_address = (hi << 8) | lo;
 		CPU->fetched = NF_readMemory(CPU->bus, CPU->fetched_address);
-		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = 0; }
+		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_INY:
 		tmp = (0x00FF & NF_readMemory(CPU->bus, CPU->PC));
@@ -211,17 +216,21 @@ void NF_fetchData(struct Processor* CPU) {
 		hi = NF_readMemory(CPU->bus, (tmp + 1) & 0x00FF);
 		CPU->fetched_address = ((hi << 8) | lo) + CPU->Y;
 		CPU->fetched = NF_readMemory(CPU->bus, CPU->fetched_address);
-		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = 0; }
+		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_XXX:
-		fflush(myLog);
-		fclose(myLog);
-		printf("Error: An illegal addressing mode was used. No value fetched.\n");
+		if (DEBUG_ENABLED) {
+			fflush(myLog);
+			fclose(myLog);
+		}
+		//printf("Error: An illegal addressing mode was used. No value fetched.\n");
 		break;
 	default:
-		fflush(myLog);
-		fclose(myLog);
-		printf("Error: A valid addressing mode was not passed. No value fetched.\n");
+		if (DEBUG_ENABLED) {
+			fflush(myLog);
+			fclose(myLog);
+		}
+		//printf("Error: A valid addressing mode was not passed. No value fetched.\n");
 		break;
 	}
 }
@@ -235,7 +244,7 @@ void NF_executeInstruction(struct Processor* CPU) {
 	uint16_t partial;
 	switch (CPU->opcode) {
 	case OP_ADC:
-		// Formula: A = A + M + C
+		// Formula: A = A + Memory + Carry
 		if (CPU->page_crossed) { CPU->cycles++; }
 		tmp = (uint16_t)CPU->A + (uint16_t)CPU->fetched + (uint16_t)NF_6502_getFlag(CPU, FLAG_C);
 		NF_6502_setFlag(CPU, FLAG_C, (tmp > 0xFF));
@@ -269,12 +278,14 @@ void NF_executeInstruction(struct Processor* CPU) {
 		}
 		break;
 	case OP_BCS:
-		if (NF_6502_getFlag(CPU, FLAG_C) != 0) {
+		if (NF_6502_getFlag(CPU, FLAG_C) != 0) { 
+			uint16_t oldPC = CPU->PC; 
+			CPU->PC = CPU->fetched_address;
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
-			CPU->PC = CPU->fetched_address;
 		}
 		break;
+
 	case OP_BEQ:
 		if (NF_6502_getFlag(CPU, FLAG_Z) != 0) {
 			CPU->cycles++;
@@ -317,21 +328,26 @@ void NF_executeInstruction(struct Processor* CPU) {
 		// and bit 4 is 1 if from an instruction (PHP or BRK) or 0 if from an interrupt line being pulled low (/IRQ or /NMI). 
 		// This is the only time and place where the B flag actually exists: not in the status register itself, but in bit 4 of the copy that is written to the stack."
 		//
-		CPU->PC++;					// The byte following the BRK instruction is a padding byte that we must skip over
+		CPU->PC++;								// The byte following the BRK instruction is a padding byte that we must skip over
 		NF_6502_setFlag(CPU, FLAG_I, 1);		// wiki.nesdev.com says that a side effect is that the I flag is set to 1.
+		// Push the program counter to the stack
 		hi = (CPU->PC >> 8) & 0x00FF;
 		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, hi & 0x00FF);
 		CPU->SP--;
 		lo = CPU->PC & 0x00FF;
 		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, lo & 0x00FF);
 		CPU->SP--;
+		// Set break and unused flags
 		NF_6502_setFlag(CPU, FLAG_B, 1);
 		NF_6502_setFlag(CPU, FLAG_U, 1);
+		// Push the status register to the flag
 		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->P);
 		CPU->SP--;
+		// Unset the flags
 		NF_6502_setFlag(CPU, FLAG_B, 0);
 		NF_6502_setFlag(CPU, FLAG_U, 0);
-		CPU->PC = (uint16_t)((NF_6502_IRQ_VECTOR + 1) | (NF_6502_IRQ_VECTOR << 8)); // Get the address of the IRQ function
+		// Set the program counter to the IRQ vector
+		CPU->PC = (uint16_t)((NF_6502_IRQ_VECTOR + 1) | (NF_6502_IRQ_VECTOR << 8));
 		break;
 	case OP_BVC:
 		if (NF_6502_getFlag(CPU, FLAG_V) == 0) {
@@ -407,6 +423,7 @@ void NF_executeInstruction(struct Processor* CPU) {
 	case OP_INX:
 		CPU->X++;
 		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
+		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		break;
 	case OP_INY:
@@ -529,8 +546,8 @@ void NF_executeInstruction(struct Processor* CPU) {
 		CPU->PC++;
 		break;
 	case OP_SBC:
-		// Formula: A = A - M - (1 - FLAG_C)
-		// Formula is equivalent to: A + ~M + C
+		// Formula: A = A - Memory - (1 - FLAG_C)
+		// Formula is equivalent to: A + ~Memory + Carry
 		// This makes it very similar to the code used for ADC
 		if (CPU->page_crossed) { CPU->cycles++; }
 		tmp = CPU->A + (CPU->fetched ^ 0x00FF) + NF_6502_getFlag(CPU, FLAG_C);
@@ -588,11 +605,11 @@ void NF_executeInstruction(struct Processor* CPU) {
 		break;
 	case OP_XXX:
 	default:
-		fflush(myLog);
-		fclose(myLog);
-
-
-		printf("Error: Illegal opcodes was found. This is not supported.\n");
+		if (DEBUG_ENABLED) {
+			fflush(myLog);
+			fclose(myLog);
+		}
+		//printf("Error: Illegal opcodes was found. This is not supported.\n");
 		break;
 	}
 }
@@ -600,18 +617,18 @@ void NF_executeInstruction(struct Processor* CPU) {
 
 // Reset signal handling
 void NF_6502_reset(struct Processor* CPU) {
-	// Processors appear NOT to be zeroed out on reset, despite many sources stating otherwise(?)
+	// Processors is NOT to be zeroed out on reset
 	// The behavior of the status flags on reset appears to be undefined behavior on the 6502, but on the NES
 	// it appears they go unchanged.
 	//CPU->A = 0xFF;
 	//CPU->X = 0xFF;
 	//CPU->Y = 0xFF;
-	//CPU->SP = 0xFF; FE?
+	//CPU->SP = 0xFD;
 	CPU->P = 0x00 | FLAG_I;
 	uint16_t lo = NF_readMemory(CPU->bus, NF_6502_RESET_VECTOR);
 	uint16_t hi = NF_readMemory(CPU->bus, NF_6502_RESET_VECTOR + 1);
 	CPU->PC = (hi << 8) | lo;
-	CPU->cycles = 7;			// Conflicting documents were found regarding if this should be 6, 7, or 8...
+	CPU->cycles = 7;
 }
 
 // Maskable interrupt signal handling
@@ -654,47 +671,32 @@ void NF_6502_nmi(struct Processor* CPU) {
 }
 
 
+int total_cycles = 7;
 void NF_6502_tickClock(struct Processor* CPU) {
 
 	if (CPU->cycles == 0) {
-
-		CPU->last_pc = CPU->PC; // For debugging 
-
-		// Prepare to execute the next instruction
+		// Fetch the opcode and prepare to execute the next instruction
+		CPU->last_pc = CPU->PC;
 		CPU->page_crossed = false;
-		CPU->opcode = charToOpcodeArray[(uint8_t)NF_readMemory(CPU->bus, CPU->PC)];
-		CPU->addr_mode = charToAddressModeArray[(uint8_t)NF_readMemory(CPU->bus, CPU->PC)];
+		uint8_t fetchedOpcode = NF_readMemory(CPU->bus, CPU->PC);
+		CPU->opcode = charToOpcodeArray[fetchedOpcode];
+		CPU->addr_mode = charToAddressModeArray[fetchedOpcode];
 		CPU->PC++;
+
 		NF_fetchData(CPU);
 
-		// Debugging --------------------------------------------------------------------
-		#define DEBUG 0
-		if (DEBUG) {
-			struct PictureProcessingUnit* PPU = CPU->bus->ConnectedPPU;
-			int bytecount = getAddressModeToByteCount(CPU->addr_mode);
-			if (bytecount == 1) {
-				fprintf(myLog, "%04X  %02X        %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
-					opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P, CPU->SP, PPU->cycle, PPU->scanline);
-			}
-			if (bytecount == 2) {
+		if (DEBUG_ENABLED) { printToDebugFile(myLog, CPU); }
 
-
-
-				fprintf(myLog, "%04X  %02X %02X     %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
-					NF_readMemory(CPU->bus, CPU->last_pc + 1), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P,
-					CPU->SP, PPU->cycle, PPU->scanline);
-			}
-			if (bytecount == 3) {
-				fprintf(myLog, "%04X  %02X %02X %02X  %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
-					NF_readMemory(CPU->bus, CPU->last_pc + 1), NF_readMemory(CPU->bus, CPU->last_pc + 2), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A,
-					CPU->X, CPU->Y, CPU->P, CPU->SP, PPU->cycle, PPU->scanline);
-			}
-		}
-		/////////////////////////////---------------------------------------------------
-
+		// Get the number of cycles for the fetched opcode and execute it
+		CPU->cycles = cyclesArray[fetchedOpcode];
 		NF_executeInstruction(CPU);
-		CPU->cycles = cyclesArray[CPU->opcode];
-		fprintf(myLog, "%d\n", CPU->bus->ticks+CPU->cycles);
+
+		if (DEBUG_ENABLED) { fprintf(myLog, "%d\n", total_cycles); }
+
+		total_cycles += CPU->cycles;
+
 	}
-	else { CPU->cycles--; }
+
+	// Decrement the CPU's cycle count for multi-cycle instructions
+	if (CPU->cycles > 0) { CPU->cycles--; }
 }

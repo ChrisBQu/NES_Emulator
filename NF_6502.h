@@ -1,5 +1,8 @@
 #ifndef NF_H_6502
 #define NF_H_6502
+
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "NF_Bus.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -9,7 +12,7 @@ typedef enum {
 	AM_ACC,         // Accumulator
 	AM_IMM,			// Immediate
 	AM_REL,			// Relative
-	AM_IMP,			// Implied
+	AM_IMP,			// Implied5
 	AM_ZPG,			// Zero Page
 	AM_ZPX,			// Zero Page, X
 	AM_ZPY,			// Zero Page, Y
@@ -38,6 +41,7 @@ ADDRESS_MODE_6502 charToAddressModeArray[256];
 
 // A struct to represent the Processor
 struct Processor {
+
 	// Variables representing the hardware
 	uint16_t PC;					// Program counter
 	uint8_t A;						// Accumulator
@@ -45,6 +49,7 @@ struct Processor {
 	uint8_t Y;						// Y-register
 	uint8_t SP;						// SP is the Stack Pointer
 	uint8_t P;						// P is the Processor Status register
+
 	// Variables that will help in emulating its functionality
 	uint8_t cycles;					// Number of cycles needed to finish performing the operation being executed
 	OPCODE_6502 opcode;			    // Opcode currently being executed

@@ -1,6 +1,8 @@
 #include "NF_6502.h"
+#include "NF_PPU.h"
 #include <stdio.h>
 #include <stdint.h>
+
 
 // Get the number of bytes that an opcode uses
 uint8_t getAddressModeToByteCount(ADDRESS_MODE_6502 value) {
@@ -23,6 +25,7 @@ const char* opcodeToString(OPCODE_6502 value) {
 
 char builtStringBuffer[50];
 
+// Build strings for debugging such that they match the format output by nestest.nes
 const char* buildFetchString(struct Processor *CPU) {
 
 
@@ -81,6 +84,32 @@ const char* buildFetchString(struct Processor *CPU) {
 		sprintf(builtStringBuffer, "                           ");
 		break;
 	}
-
 	return builtStringBuffer;
+}
+
+// Print a line showing the debug information of the Processor and PPU in format:
+//
+// C000  4C F5 C5  JMP $C5F5                       A : 00 X : 00 Y : 00 P : 24 SP : FD PPU : 0, 21 CYC : 7
+// C5F5  A2 00     LDX #$00                        A : 00 X : 00 Y : 00 P : 24 SP : FD PPU : 0, 30 CYC : 10
+// C5F7  86 00     STX $00 = 00                    A : 00 X : 00 Y : 00 P : 26 SP : FD PPU : 0, 36 CYC : 12
+// C5F9  86 10     STX $10 = 00                    A : 00 X : 00 Y : 00 P : 26 SP : FD PPU : 0, 45 CYC : 15
+// C5FB  86 11     STX $11 = 00                    A : 00 X : 00 Y : 00 P : 26 SP : FD PPU : 0, 54 CYC : 18
+// etc.
+//
+void printToDebugFile(FILE* log, struct Processor* CPU) {
+	int bytecount = getAddressModeToByteCount(CPU->addr_mode);
+	if (bytecount == 1) {
+		fprintf(log, "%04X  %02X        %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
+			opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P, CPU->SP, CPU->bus->ConnectedPPU->scanline, CPU->bus->ConnectedPPU->cycle);
+	}
+	else if (bytecount == 2) {
+		fprintf(log, "%04X  %02X %02X     %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
+			NF_readMemory(CPU->bus, CPU->last_pc + 1), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P,
+			CPU->SP, CPU->bus->ConnectedPPU->scanline, CPU->bus->ConnectedPPU->cycle);
+	}
+	else if (bytecount == 3) {
+		fprintf(log, "%04X  %02X %02X %02X  %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
+			NF_readMemory(CPU->bus, CPU->last_pc + 1), NF_readMemory(CPU->bus, CPU->last_pc + 2), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A,
+			CPU->X, CPU->Y, CPU->P, CPU->SP, CPU->bus->ConnectedPPU->scanline, CPU->bus->ConnectedPPU->cycle);
+	}
 }

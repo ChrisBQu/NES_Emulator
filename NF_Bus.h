@@ -21,7 +21,6 @@
 
 #define NF_6502_STACK_LOCATION (uint16_t)0x0100
 #define NF_6502_ROM_LOCATION (uint16_t)0x8000
-#define NF_6502_PROGRAM_LOCATION (uint16_t)0x8000
 #define NF_6502_NMI_VECTOR (uint16_t)0xFFFA
 #define NF_6502_RESET_VECTOR (uint16_t)0xFFFC
 #define NF_6502_IRQ_VECTOR (uint16_t)0xFFFE
@@ -29,7 +28,6 @@
 // This structure represents the console itself. It bundles objects making up the physical parts of the
 // console, and acts as a bus, allowing them to communicate with one another
 struct NES_Console {
-	uint16_t ticks;
 	uint8_t Memory[0x10000];
 	struct Cartridge* ConnectedCartridge;
 	struct Processor* ConnectedProcessor;
@@ -41,7 +39,7 @@ struct NES_Console {
 struct NES_Console* NF_initConsole();
 
 // Connect a cartridge to the console. This function also places the Program Counter at the Reset vector
-void NF_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
+int NF_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
 
 // Send out one clock tick. This will advance both the CPU and the PPU appropriately
 void NF_busTickMasterClock(struct NES_Console* console, bool r);

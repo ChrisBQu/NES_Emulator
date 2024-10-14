@@ -43,7 +43,6 @@ typedef enum {
 } PPU_REGISTER;
 
 // This is the accepted way to do things, and the one with the best documentation so here we go...
-// Thank you, Loopy
 union LoopyRegister {
 	struct {
 		uint16_t coarse_x : 5;
@@ -51,7 +50,7 @@ union LoopyRegister {
 		uint16_t nametable_x : 1;
 		uint16_t nametable_y : 1;
 		uint16_t fine_y : 3;
-		uint16_t unused_padding : 1; // Want this to align to 16-bits
+		uint16_t unused_padding : 1;
 	};
 	uint16_t address;
 };
@@ -67,6 +66,7 @@ struct PictureProcessingUnit {
 	// Used by registers that require two writes (PPUSCROLL, PPUADDR) to store state between writes
 	uint8_t address_latch; // This one is actually in hardware
 	uint8_t delayed_buffer;
+	uint8_t fine_x;
 
 	// Used by the beam rendering the screen
 	int16_t cycle;
@@ -107,10 +107,21 @@ struct PictureProcessingUnit {
 	// OAMADDR ($2003)
 	// Access: Write-only
 	// This holds an address of where you want to write in the OAM (Object Attribute Memory)
-	// However, you can use OAMDMA, which is faster and more efficient
+	// The range is 0x00 - 0xFF, corresponding to the bytes of OAM
 	uint8_t reg_OAMADDR;
 
-	// TO DO: Learn more about this one. It's very glitchy
+	// OAMDATA ($2004)
+	// Each write to OAMDATA will increement the address of OAMADDR
+	// Byte 0 is Y-Coordinate of first sprite
+	// Byte 1 is Tile index of first sprite
+	// Byte 2 is attributes of first sprite:
+	//		Bit 0-1: Not used
+	//		Bit 2-3: Which palette to use
+	//		Bit 4: Not used
+	//		Bit 5: Flip sprite horizontally, 0 is normal, 1 is flipped
+	//		Bit 6: Flip sprite vertically, 0 is normal, 1 is flipped
+	//		Bit 7: Sprite priority, 0 is in front of background, 1 is behind the background
+	// Byte 3 is X-Coordinate of first sprite
 	uint8_t reg_OAMDATA;
 
 	// PPUSCROLL ($2005)

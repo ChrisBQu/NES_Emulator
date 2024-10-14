@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 // An array to represent the virtual control pad 
-typedef enum { CF_UP, CF_RIGHT, CF_DOWN, CF_LEFT, CF_A, CF_B, CF_X, CF_Y, CF_SELECT, CF_START, CF_NUMBER_OF_BUTTONS } CF_BUTTON;
+typedef enum { CF_UP, CF_RIGHT, CF_DOWN, CF_LEFT, CF_A, CF_B, CF_SELECT, CF_START, CF_NUMBER_OF_BUTTONS } CF_BUTTON;
 
 // The following three functions return
 bool* CF_getButtonsPressed();
