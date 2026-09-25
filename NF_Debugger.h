@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-#define DEBUG_ENABLED 1
+#define DEBUG_ENABLED 0
 
 #include "NF_6502.h"
 #include <stdlib.h>

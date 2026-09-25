@@ -2,7 +2,9 @@
 #define NF_H_BUS
 #include "NF_Cartridge.h"
 #include "NF_Palette.h"
+#include "NF_ControllerPort.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 // Representation of the memory. This maps in the following way:
 // 
@@ -32,7 +34,10 @@ struct NES_Console {
 	struct Cartridge* ConnectedCartridge;
 	struct Processor* ConnectedProcessor;
 	struct PictureProcessingUnit* ConnectedPPU;
+	struct AudioProcessingUnit* ConnectedAPU;
+	struct ControllerPort* ConnectedControllerPort;
 	void (*imageOutFunc)(struct NF_Pixel);
+	void (*audioOutFunc)(float);
 };
 
 // Must be called once to create the Console object
@@ -52,5 +57,8 @@ void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value
 
 // Read from the CPU memory address
 uint8_t NF_readMemory(struct NES_Console* console, uint16_t address);
+
+// Read from the CPU memory address without side effects (PPU registers read as 0)
+uint8_t NF_peekMemory(struct NES_Console* console, uint16_t address);
 
 #endif

@@ -60,4 +60,7 @@ uint8_t NF_readCartPRG_ROM(struct Cartridge* c, uint16_t address);
 // Read CHR ROM from a cartridge
 uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address);
 
+// Write to CHR memory on a cartridge (only has an effect on boards with CHR RAM)
+void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data);
+
 #endif

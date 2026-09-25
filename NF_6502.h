@@ -1,5 +1,5 @@
-#ifndef NF_H_6502
-#define NF_H_6502
+#ifndef NF_6502_H
+#define NF_6502_H
 
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -12,7 +12,7 @@ typedef enum {
 	AM_ACC,         // Accumulator
 	AM_IMM,			// Immediate
 	AM_REL,			// Relative
-	AM_IMP,			// Implied5
+	AM_IMP,			// Implied
 	AM_ZPG,			// Zero Page
 	AM_ZPX,			// Zero Page, X
 	AM_ZPY,			// Zero Page, Y
@@ -36,8 +36,8 @@ typedef enum {
 
 
 
-OPCODE_6502 charToOpcodeArray[256];
-ADDRESS_MODE_6502 charToAddressModeArray[256];
+extern OPCODE_6502 charToOpcodeArray[256];
+extern ADDRESS_MODE_6502 charToAddressModeArray[256];
 
 // A struct to represent the Processor
 struct Processor {
@@ -51,13 +51,14 @@ struct Processor {
 	uint8_t P;						// P is the Processor Status register
 
 	// Variables that will help in emulating its functionality
-	uint8_t cycles;					// Number of cycles needed to finish performing the operation being executed
+	uint16_t cycles;				// Number of cycles needed to finish performing the operation being executed (16-bit to fit the 513-cycle OAM DMA stall)
 	OPCODE_6502 opcode;			    // Opcode currently being executed
 	ADDRESS_MODE_6502 addr_mode;    // Address mode being used by the current opcode
 	uint8_t fetched;
 	uint16_t fetched_address;
 	struct NES_Console* bus;
 	bool page_crossed;
+	bool nmi_pending;				// Set by the PPU (through the bus); serviced at the next instruction boundary
 
 	// Debugger values
 	uint16_t last_pc;

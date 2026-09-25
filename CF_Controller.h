@@ -1,24 +1,29 @@
 #ifndef CF_H_CONTROLLER
 #define CF_H_CONTROLLER
+
 #include <SDL.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-// An array to represent the virtual control pad 
+#include "Utils/Hashmap.h"
+
 typedef enum { CF_UP, CF_RIGHT, CF_DOWN, CF_LEFT, CF_A, CF_B, CF_SELECT, CF_START, CF_NUMBER_OF_BUTTONS } CF_BUTTON;
 
-// The following three functions return
-bool* CF_getButtonsPressed();
-bool* CF_getButtonsHeld();
-bool* CF_getButtonsReleased();
+typedef struct Controller Controller;
 
-// Map an SDL Scancode to one of the buttons on the virtual controller
-void CF_mapButton(unsigned short from_Scancode, CF_BUTTON to_Button);
+Controller* create_controller();
+void destroy_controller(Controller *controller);
 
-// Call once per frame, at the beginning of the frame, to clear flags for pressed and released keys
-void CF_clearControllerInput();
+void controller_init_default_bindings(Controller *controller);
 
-// All key presses and releases should be passed into this function once per frame
-// This should be called after CF_clearControllerInput() but before attempting to read the state of the button arrays
-void CF_receiveControllerInput(SDL_Event e);
+void controller_bind_key_to_button(Controller* controller, SDL_Keycode key, CF_BUTTON button);
+void controller_bind_stick_to_button(Controller *controller, int from_stick, int from_axis, int from_direction, SDL_GameControllerButton to_button);
+void controller_handle_input(Controller *controller, SDL_Event event);
+
+bool controller_get_pressed(Controller* controller, SDL_GameControllerButton b);
+
+// Pack the button state into the byte the NES controller shift register is loaded with
+// bit 0 = A, 1 = B, 2 = Select, 3 = Start, 4 = Up, 5 = Down, 6 = Left, 7 = Right
+uint8_t controller_get_state_as_byte(Controller* controller);
 
 #endif

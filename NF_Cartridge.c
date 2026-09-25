@@ -2,6 +2,7 @@
 
 #include "NF_Cartridge.h"
 #include <stdio.h>
+#include <string.h>
 #include <malloc.h>
 
 #define PRG_ROM_BLOCK_SIZE 16384
@@ -37,7 +38,6 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 	// Check if the header is NES 2.0
 	if ((rom_data[7] & 0x0C) == 0x08) {
 		Cart->header_type = HEADER_NES_2;
-		// TO DO: Implement NES 2.0 Header support
 	}
 
 	// Check if the header is iNES, or is invalid
@@ -62,7 +62,8 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 		free(Cart);
 		return 0;
 	}
-	Cart->chr_rom = malloc(CHR_ROM_BLOCK_SIZE * Cart->chr_rom_blocks);
+	// A CHR ROM size of 0 means the board has 8KB of CHR RAM instead, which the PPU can write to
+	Cart->chr_rom = malloc(CHR_ROM_BLOCK_SIZE * (Cart->chr_rom_blocks == 0 ? 1 : Cart->chr_rom_blocks));
 	if (Cart->chr_rom == NULL) {
 		printf("Error: Could not create cartridge object. Could not create PRG ROM buffer. Out of memory?\n");
 		free(Cart->prg_rom);
@@ -72,9 +73,12 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 
 	// Copy the PRG ROM and CHR ROM blocks to the cartridge object
 	memcpy(Cart->prg_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0)], PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks);
-	memcpy(Cart->chr_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0) + PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks], CHR_ROM_BLOCK_SIZE * Cart->chr_rom_blocks);
-	
-	// TO DO: Mapper 355 and 086 use Misc. ROM area following CHR ROM.
+	if (Cart->chr_rom_blocks == 0) { memset(Cart->chr_rom, 0, CHR_ROM_BLOCK_SIZE); }
+	else { memcpy(Cart->chr_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0) + PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks], CHR_ROM_BLOCK_SIZE * Cart->chr_rom_blocks); }
+
+	if (Cart->mapper != 0) {
+		printf("Warning: Mapper %d is not supported. Only mapper 0 (NROM) is implemented, so this game will likely not run correctly.\n", Cart->mapper);
+	}
 
 	return Cart;
 }
@@ -85,10 +89,19 @@ uint8_t * NF_readROMtoBuffer(const char* filename) {
 	char* buffer;
 	long filelen;
 	fileptr = fopen(filename, "rb");
+	if (fileptr == NULL) {
+		printf("Error: Could not open ROM file '%s'.\n", filename);
+		return NULL;
+	}
 	fseek(fileptr, 0, SEEK_END);
 	filelen = ftell(fileptr);
 	rewind(fileptr);
 	buffer = (uint8_t*)malloc(filelen * sizeof(uint8_t));
+	if (buffer == NULL) {
+		printf("Error: Could not allocate a buffer for the ROM file. Out of memory?\n");
+		fclose(fileptr);
+		return NULL;
+	}
 	fread(buffer, filelen, 1, fileptr);
 	fclose(fileptr);
 	return buffer;
@@ -103,8 +116,9 @@ uint8_t NF_readCartPRG_ROM(struct Cartridge *c, uint16_t address) {
 
 	// Mapper 0
 	// If there's 32 KB of prg_rom, it uses the whole address space. Otherwise, if there's 16KB, it's mirrored
-	if (c->prg_rom_blocks == 2) { return c->prg_rom[address - 0x8000]; }
-	else { return c->prg_rom[address - 0xC000]; }
+	// into both $8000-$BFFF and $C000-$FFFF
+	if (c->prg_rom_blocks == 2) { return c->prg_rom[(address - 0x8000) & 0x7FFF]; }
+	else { return c->prg_rom[(address - 0x8000) & 0x3FFF]; }
 }
 
 uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
@@ -115,5 +129,16 @@ uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
 	}
 
 	// Mapper 0
-	return c->chr_rom[address];
+	return c->chr_rom[address & 0x1FFF];
+}
+
+void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data) {
+
+	if (c == NULL) {
+		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write CHR function.\n");
+		return;
+	}
+
+	// Mapper 0: only CHR RAM is writable. Writes to CHR ROM are ignored
+	if (c->chr_rom_blocks == 0) { c->chr_rom[address & 0x1FFF] = data; }
 }

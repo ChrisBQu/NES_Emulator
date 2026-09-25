@@ -29,41 +29,40 @@ char builtStringBuffer[50];
 const char* buildFetchString(struct Processor *CPU) {
 
 
-	ADDRESS_MODE_6502 addr_mode = charToAddressModeArray[NF_readMemory(CPU->bus, CPU->last_pc)];
-	OPCODE_6502 opcode = charToOpcodeArray[NF_readMemory(CPU->bus, CPU->last_pc)];
-	//printf("last_pc: %02X, AM_MODE: %d\n", CPU->last_pc, addr_mode);
+	ADDRESS_MODE_6502 addr_mode = charToAddressModeArray[NF_peekMemory(CPU->bus, CPU->last_pc)];
+	OPCODE_6502 opcode = charToOpcodeArray[NF_peekMemory(CPU->bus, CPU->last_pc)];
 	uint16_t lo;
 	uint16_t hi;
 	switch (addr_mode) {
 	case AM_ABS:
-		if (opcode == OP_JSR || opcode == OP_JMP) { sprintf(builtStringBuffer, "$%02X%02X                      ", NF_readMemory(CPU->bus, CPU->last_pc + 2), NF_readMemory(CPU->bus, CPU->last_pc + 1)); }
+		if (opcode == OP_JSR || opcode == OP_JMP) { sprintf(builtStringBuffer, "$%02X%02X                      ", NF_peekMemory(CPU->bus, CPU->last_pc + 2), NF_peekMemory(CPU->bus, CPU->last_pc + 1)); }
 		else { 
-			hi = NF_readMemory(CPU->bus, CPU->last_pc + 2);
-			lo  = NF_readMemory(CPU->bus, CPU->last_pc + 1);
-			if (opcode == OP_STX || opcode == OP_STY || opcode == OP_STA) { sprintf(builtStringBuffer, "$%02X%02X = %02X                 ", hi, lo, NF_readMemory(CPU->bus, (hi << 8) | lo)); }
-			else { sprintf(builtStringBuffer, "$%02X%02X = %02X                 ", hi, lo, NF_readMemory(CPU->bus, (hi << 8) | lo)); }
+			hi = NF_peekMemory(CPU->bus, CPU->last_pc + 2);
+			lo  = NF_peekMemory(CPU->bus, CPU->last_pc + 1);
+			if (opcode == OP_STX || opcode == OP_STY || opcode == OP_STA) { sprintf(builtStringBuffer, "$%02X%02X = %02X                 ", hi, lo, NF_peekMemory(CPU->bus, (hi << 8) | lo)); }
+			else { sprintf(builtStringBuffer, "$%02X%02X = %02X                 ", hi, lo, NF_peekMemory(CPU->bus, (hi << 8) | lo)); }
 		}
 		break;
 	case AM_IND:
-		sprintf(builtStringBuffer, "($%02X%02X) = %04X             ", NF_readMemory(CPU->bus, CPU->last_pc + 2), NF_readMemory(CPU->bus, CPU->last_pc + 1), CPU->fetched_address);
+		sprintf(builtStringBuffer, "($%02X%02X) = %04X             ", NF_peekMemory(CPU->bus, CPU->last_pc + 2), NF_peekMemory(CPU->bus, CPU->last_pc + 1), CPU->fetched_address);
 		break;
 	case AM_IMM:
-		sprintf(builtStringBuffer, "#$%02X                       ", NF_readMemory(CPU->bus, CPU->last_pc + 1));
+		sprintf(builtStringBuffer, "#$%02X                       ", NF_peekMemory(CPU->bus, CPU->last_pc + 1));
 		break;
 	case AM_ZPG:
-		sprintf(builtStringBuffer, "$%02X = %02X                   ", NF_readMemory(CPU->bus, CPU->last_pc + 1), CPU->fetched);
+		sprintf(builtStringBuffer, "$%02X = %02X                   ", NF_peekMemory(CPU->bus, CPU->last_pc + 1), CPU->fetched);
 		break;
 	case AM_ZPX:
-		sprintf(builtStringBuffer, "$%02X,X @ %02X = %02X            ", NF_readMemory(CPU->bus, CPU->last_pc + 1), (uint8_t)((uint8_t)CPU->X + (uint8_t)NF_readMemory(CPU->bus, CPU->last_pc + 1)), CPU->fetched);
+		sprintf(builtStringBuffer, "$%02X,X @ %02X = %02X            ", NF_peekMemory(CPU->bus, CPU->last_pc + 1), (uint8_t)((uint8_t)CPU->X + (uint8_t)NF_peekMemory(CPU->bus, CPU->last_pc + 1)), CPU->fetched);
 		break;
 	case AM_ZPY:
-		sprintf(builtStringBuffer, "$%02X,Y @ %02X = %02X            ", NF_readMemory(CPU->bus, CPU->last_pc + 1), (uint8_t)((uint8_t)CPU->Y + (uint8_t)NF_readMemory(CPU->bus, CPU->last_pc + 1)), CPU->fetched);
+		sprintf(builtStringBuffer, "$%02X,Y @ %02X = %02X            ", NF_peekMemory(CPU->bus, CPU->last_pc + 1), (uint8_t)((uint8_t)CPU->Y + (uint8_t)NF_peekMemory(CPU->bus, CPU->last_pc + 1)), CPU->fetched);
 		break;
 	case AM_INX:
-		sprintf(builtStringBuffer, "($%02X,X) @ %02X = %04X = %02X   ", NF_readMemory(CPU->bus, CPU->last_pc + 1), (uint8_t)(CPU->X + NF_readMemory(CPU->bus, CPU->last_pc + 1)), CPU->fetched_address, CPU->fetched);
+		sprintf(builtStringBuffer, "($%02X,X) @ %02X = %04X = %02X   ", NF_peekMemory(CPU->bus, CPU->last_pc + 1), (uint8_t)(CPU->X + NF_peekMemory(CPU->bus, CPU->last_pc + 1)), CPU->fetched_address, CPU->fetched);
 		break;
 	case AM_INY:
-		sprintf(builtStringBuffer, "($%02X),Y = %04X @ %04X = %02X ", NF_readMemory(CPU->bus, CPU->last_pc + 1), (uint16_t)(CPU->fetched_address - CPU->Y), CPU->fetched_address, CPU->fetched);
+		sprintf(builtStringBuffer, "($%02X),Y = %04X @ %04X = %02X ", NF_peekMemory(CPU->bus, CPU->last_pc + 1), (uint16_t)(CPU->fetched_address - CPU->Y), CPU->fetched_address, CPU->fetched);
 		break;
 	case AM_REL:
 		sprintf(builtStringBuffer, "$%04X                      ", CPU->fetched_address);
@@ -99,17 +98,17 @@ const char* buildFetchString(struct Processor *CPU) {
 void printToDebugFile(FILE* log, struct Processor* CPU) {
 	int bytecount = getAddressModeToByteCount(CPU->addr_mode);
 	if (bytecount == 1) {
-		fprintf(log, "%04X  %02X        %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
+		fprintf(log, "%04X  %02X        %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_peekMemory(CPU->bus, CPU->last_pc),
 			opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P, CPU->SP, CPU->bus->ConnectedPPU->scanline, CPU->bus->ConnectedPPU->cycle);
 	}
 	else if (bytecount == 2) {
-		fprintf(log, "%04X  %02X %02X     %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
-			NF_readMemory(CPU->bus, CPU->last_pc + 1), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P,
+		fprintf(log, "%04X  %02X %02X     %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_peekMemory(CPU->bus, CPU->last_pc),
+			NF_peekMemory(CPU->bus, CPU->last_pc + 1), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A, CPU->X, CPU->Y, CPU->P,
 			CPU->SP, CPU->bus->ConnectedPPU->scanline, CPU->bus->ConnectedPPU->cycle);
 	}
 	else if (bytecount == 3) {
-		fprintf(log, "%04X  %02X %02X %02X  %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_readMemory(CPU->bus, CPU->last_pc),
-			NF_readMemory(CPU->bus, CPU->last_pc + 1), NF_readMemory(CPU->bus, CPU->last_pc + 2), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A,
+		fprintf(log, "%04X  %02X %02X %02X  %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:", CPU->last_pc, NF_peekMemory(CPU->bus, CPU->last_pc),
+			NF_peekMemory(CPU->bus, CPU->last_pc + 1), NF_peekMemory(CPU->bus, CPU->last_pc + 2), opcodeToString(CPU->opcode), buildFetchString(CPU), CPU->A,
 			CPU->X, CPU->Y, CPU->P, CPU->SP, CPU->bus->ConnectedPPU->scanline, CPU->bus->ConnectedPPU->cycle);
 	}
 }

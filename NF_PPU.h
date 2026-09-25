@@ -2,6 +2,7 @@
 #define NF_H_PPU
 #include "NF_Bus.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 // Representation of the memory. This maps in the following way:
 // 
@@ -17,7 +18,7 @@
 
 #define PPU_NAMETABLE_RAM_SIZE 0x0800
 #define PPU_PALETTE_RAM_SIZE 0x20
-#define PPU_OAM_MEMORY_SIZE 0xFF
+#define PPU_OAM_MEMORY_SIZE 0x100
 #define PPU_SCANLINE_PRERENDER -1
 #define PPU_SCANLINE_SCREEN_MAX 240
 #define PPU_SCANLINE_MAX 261
@@ -41,6 +42,16 @@ typedef enum {
 	REG_PPUDATA,
 	REG_OAMDMA
 } PPU_REGISTER;
+
+#define PPU_MAX_SPRITES_PER_SCANLINE 8
+
+// One sprite entry, laid out the same as its 4 bytes in OAM (see the OAMDATA comment below for details)
+struct NF_SpriteEntry {
+	uint8_t y;       // Y position of the top of the sprite, minus 1
+	uint8_t id;      // Tile index
+	uint8_t attr;    // Palette, priority, and flip bits
+	uint8_t x;       // X position of the left side of the sprite
+};
 
 // This is the accepted way to do things, and the one with the best documentation so here we go...
 union LoopyRegister {
@@ -71,6 +82,9 @@ struct PictureProcessingUnit {
 	// Used by the beam rendering the screen
 	int16_t cycle;
 	int16_t scanline;
+	bool odd_frame;       // Odd frames skip one cycle on the pre-render scanline when rendering is enabled
+	bool frame_complete;  // Set once the last visible pixel of a frame is output; cleared by the frontend
+	
 	// Registers
 
 	// PPUCTRL ($2000)
@@ -144,12 +158,36 @@ struct PictureProcessingUnit {
 	// when it comes to scrolling. See: https://wiki.nesdev.com/w/index.php/PPU_scrolling
 	union LoopyRegister vram_addr;
 	union LoopyRegister tram_addr;
+
+	// Background rendering pipeline: latches for the next tile's data
+	uint8_t bg_next_tile_id;
+	uint8_t bg_next_tile_attrib;
+	uint8_t bg_next_tile_lsb;
+	uint8_t bg_next_tile_msb;
+
+	// Background rendering shift registers (16-bit so two tiles' worth of data can be held)
+	uint16_t bg_shifter_pattern_lo;
+	uint16_t bg_shifter_pattern_hi;
+	uint16_t bg_shifter_attrib_lo;
+	uint16_t bg_shifter_attrib_hi;
+
+	// Sprite rendering: the (up to 8) sprites selected from OAM for the scanline being drawn ("secondary OAM").
+	// The x field of each entry is counted down as the scanline is drawn, and the sprite starts shifting out once it reaches 0
+	struct NF_SpriteEntry sprite_scanline[PPU_MAX_SPRITES_PER_SCANLINE];
+	uint8_t sprite_count;
+	uint8_t sprite_shifter_pattern_lo[PPU_MAX_SPRITES_PER_SCANLINE];
+	uint8_t sprite_shifter_pattern_hi[PPU_MAX_SPRITES_PER_SCANLINE];
+	bool sprite_zero_on_line;       // Sprite 0 was selected for the scanline being drawn
+	bool sprite_zero_being_drawn;   // Sprite 0 supplied the sprite pixel currently being output
 };
 
 uint8_t NF_PPU_readRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg);
 void NF_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, uint8_t data);
 struct PictureProcessingUnit* NF_initPPU();
 void NF_PPU_tickClock(struct PictureProcessingUnit* ppu);
+
+// Copy 256 bytes into OAM starting at OAMADDR (used by the OAM DMA at $4014)
+void NF_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page);
 
 
 #endif

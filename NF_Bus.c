@@ -1,8 +1,10 @@
 #include "NF_Bus.h"
 #include "NF_6502.h"
 #include "NF_PPU.h"
+#include "NF_APU.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // Constructor
 struct NES_Console* NF_initConsole() {
@@ -20,6 +22,17 @@ struct NES_Console* NF_initConsole() {
 	if (console->ConnectedPPU == NULL) { return 0; }
 	console->ConnectedPPU->bus = console;
 
+	console->ConnectedAPU = NF_initAPU();
+	if (console->ConnectedAPU == NULL) { return 0; }
+	console->ConnectedAPU->bus = console;
+
+	console->ConnectedControllerPort = NF_initControllerPort();
+	if (console->ConnectedControllerPort == NULL) { return 0; }
+	console->ConnectedControllerPort->bus = console;
+
+	console->ConnectedCartridge = NULL;
+	console->imageOutFunc = NULL;
+	console->audioOutFunc = NULL;
 	memset(console->Memory, 0, 0x10000);
 	return console;
 }
@@ -32,7 +45,8 @@ int NF_insertCartridge(struct NES_Console *console, struct Cartridge *cart) {
 	}
 	console->ConnectedCartridge = cart; 
 	console->ConnectedProcessor->PC = (NF_readMemory(console, NF_6502_RESET_VECTOR + 1) << 8) | NF_readMemory(console, NF_6502_RESET_VECTOR);
-	console->ConnectedProcessor->PC = 0xC000; // For testing with nestest.nes, comment out otherwise
+	//console->ConnectedProcessor->PC = 0xC000; // For testing with nestest.nes, comment out otherwise
+	return 0;
 }
 
 void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value) {
@@ -43,6 +57,30 @@ void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value
 	// PPU register addresses are also mirrored repeatedly
 	else if (address >= 0x2000 && address <= 0x3FFF) {
 		NF_PPU_writeRegister(console->ConnectedPPU, (PPU_REGISTER)(address % 0x08), value);
+	}
+
+	// OAM DMA: copy the 256-byte page $XX00-$XXFF into the PPU's OAM. The CPU is halted while this happens
+	else if (address == 0x4014) {
+		uint8_t page[256];
+		for (int i = 0; i < 256; i++) {
+			page[i] = NF_readMemory(console, (uint16_t)((value << 8) | i));
+		}
+		NF_PPU_writeOAMDMA(console->ConnectedPPU, page);
+		console->ConnectedProcessor->cycles += 513;
+	}
+
+	// Controller strobe: while bit 0 is set, both controllers keep latching their current buttons
+	else if (address == 0x4016) {
+		console->ConnectedControllerPort->controller_strobe = (value & 0x01) != 0;
+		if (console->ConnectedControllerPort->controller_strobe) {
+			console->ConnectedControllerPort->controller_shift[0] = console->ConnectedControllerPort->controller_state[0];
+			console->ConnectedControllerPort->controller_shift[1] = console->ConnectedControllerPort->controller_state[1];
+		}
+	}
+
+	// APU registers ($4017 is the frame counter when written, but controller 2 when read)
+	else if ((address >= 0x4000 && address <= 0x4013) || address == 0x4015 || address == 0x4017) {
+		NF_APU_writeRegister(console->ConnectedAPU, address, value);
 	}
 
 	// Reading PRG Rom from the cartridge
@@ -66,6 +104,20 @@ uint8_t NF_readMemory(struct NES_Console* console, uint16_t address) {
 		return NF_PPU_readRegister(console->ConnectedPPU, (PPU_REGISTER)(address % 0x08));
 	}
 
+	// APU status is the only readable APU register
+	else if (address == 0x4015) {
+		return NF_APU_readStatus(console->ConnectedAPU);
+	}
+
+	// Controllers return one button per read, in bit 0. Bit 6 reads as 1 from open bus
+	else if (address == 0x4016 || address == 0x4017) {
+		int port = address - 0x4016;
+		if (console->ConnectedControllerPort->controller_strobe) { console->ConnectedControllerPort->controller_shift[port] = console->ConnectedControllerPort->controller_state[port]; }
+		uint8_t bit = console->ConnectedControllerPort->controller_shift[port] & 0x01;
+		console->ConnectedControllerPort->controller_shift[port] = (console->ConnectedControllerPort->controller_shift[port] >> 1) | 0x80;  // After 8 reads, a real controller returns 1s
+		return 0x40 | bit;
+	}
+
 	// Reading PRG Rom from the cartridge
 	else if (address >= NF_6502_ROM_LOCATION) {
 		return NF_readCartPRG_ROM(console->ConnectedCartridge, address);
@@ -74,16 +126,28 @@ uint8_t NF_readMemory(struct NES_Console* console, uint16_t address) {
 	else { return console->Memory[address]; }
 }
 
-// Calls the NMI function of the connected Processor. 
+// Read from the CPU address space without triggering side effects. Reading some PPU registers changes PPU state
+// (e.g. PPUSTATUS clears VBlank, PPUDATA advances the VRAM address), so this is used for dummy operand fetches and the debugger
+uint8_t NF_peekMemory(struct NES_Console* console, uint16_t address) {
+	if (address >= 0x2000 && address <= 0x3FFF) { return 0x00; }
+	if (address == 0x4015) { return 0x00; }  // Reading APU status clears the frame IRQ flag
+	if (address == 0x4016 || address == 0x4017) { return 0x40 | (console->ConnectedControllerPort->controller_shift[address - 0x4016] & 0x01); }  // Reading shifts the controller
+	return NF_readMemory(console, address);
+}
+
+// Signals the NMI line of the connected Processor, which will service it once the current instruction finishes.
 // This exists so that the PPU can trigger the NMI by passing up a signal through the bus that it is on (VBlank)
 void NF_emitNMI(struct NES_Console* console) {
-	NF_6502_nmi(console->ConnectedProcessor);
+	console->ConnectedProcessor->nmi_pending = true;
 }
 
 // The NES uses a single master clock, and for every 3 ticks of the PPU, the CPU has one tick
 void NF_busTickMasterClock(struct NES_Console* console, bool r) {
-	NF_6502_tickClock(console->ConnectedProcessor);
-	NF_PPU_tickClock(console->ConnectedPPU);
-	NF_PPU_tickClock(console->ConnectedPPU);
-	NF_PPU_tickClock(console->ConnectedPPU);
+	if (r) {
+		NF_6502_tickClock(console->ConnectedProcessor);
+		NF_APU_tickClock(console->ConnectedAPU);
+		NF_PPU_tickClock(console->ConnectedPPU);
+		NF_PPU_tickClock(console->ConnectedPPU);
+		NF_PPU_tickClock(console->ConnectedPPU);
+	}
 }
