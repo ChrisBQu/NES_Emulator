@@ -10,8 +10,8 @@
 // $4004-4007: Pulse 2   (same layout as pulse 1)
 // $4008-400B: Triangle  (linear counter, unused, timer low, length counter load/timer high)
 // $400C-400F: Noise     (envelope, unused, mode/period, length counter load)
-// $4010-4013: DMC       (not implemented yet)
-// $4015:      Status    (write: enable channels, read: which channels are still playing, frame IRQ flag)
+// $4010-4013: DMC       (IRQ enable/loop/rate, direct output level, sample address, sample length)
+// $4015:      Status    (write: enable channels, read: which channels are still playing, frame and DMC IRQ flags)
 // $4017:      Frame counter (write only: 4-step/5-step mode, IRQ inhibit)
 
 #define NF_APU_CPU_CLOCK_RATE 1789773.0
@@ -66,6 +66,31 @@ struct NF_APU_Noise {
 	struct NF_APU_Envelope envelope;
 };
 
+// Delta modulation channel: plays 1-bit delta-encoded samples read from cartridge memory
+struct NF_APU_DMC {
+	bool irq_enabled;          // Set the interrupt flag when a non-looping sample finishes
+	bool loop;                 // Restart the sample when it finishes
+	bool irq;                  // Interrupt flag; nothing raises a CPU IRQ from it yet
+	uint16_t timer_period;     // CPU cycles between output level changes
+	uint16_t timer;
+	uint8_t output_level;      // 7-bit level (0-127) sent to the mixer
+
+	// Memory reader: fetches sample bytes into the sample buffer
+	uint16_t sample_address;   // $C000 + ($4012 * 64)
+	uint16_t sample_length;    // ($4013 * 16) + 1 bytes
+	uint16_t current_address;
+	uint16_t bytes_remaining;  // The channel is playing while this is non-zero
+
+	// Sample buffer: holds the next byte for the output unit
+	uint8_t sample_buffer;
+	bool sample_buffer_empty;
+
+	// Output unit: plays the bits of a byte one at a time, lowest bit first
+	uint8_t shift_register;
+	uint8_t bits_remaining;
+	bool silence;              // Set when the buffer was empty at the start of a byte, holding the output level
+};
+
 struct AudioProcessingUnit {
 	struct NES_Console* bus;
 
@@ -73,13 +98,14 @@ struct AudioProcessingUnit {
 	struct NF_APU_Pulse pulse2;
 	struct NF_APU_Triangle triangle;
 	struct NF_APU_Noise noise;
+	struct NF_APU_DMC dmc;
 
-	// Frame counter: clocks the envelopes, length counters, sweeps and linear counter at ~240Hz
+	// Frame counter: ticks the envelopes, length counters, sweeps and linear counter at ~240Hz
 	bool frame_mode_5step;
 	bool irq_inhibit;
 	bool frame_irq;            // Set by the 4-step sequence; nothing raises a CPU IRQ from it yet
 	uint32_t frame_cycle;
-	bool odd_cycle;            // Pulse timers are clocked every other CPU cycle
+	bool odd_cycle;            // Pulse timers are ticked every other CPU cycle
 
 	// Downsampling from the CPU clock rate to the output sample rate
 	double sample_rate;
@@ -105,7 +131,8 @@ void NF_APU_tickClock(struct AudioProcessingUnit* apu);
 // Write to one of the APU registers ($4000-$4013, $4015, $4017)
 void NF_APU_writeRegister(struct AudioProcessingUnit* apu, uint16_t address, uint8_t data);
 
-// Read the status register ($4015). This clears the frame IRQ flag
+// Read the status register ($4015). 
+// Note: This clears the frame IRQ flag.
 uint8_t NF_APU_readStatus(struct AudioProcessingUnit* apu);
 
 #endif
