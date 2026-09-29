@@ -10,6 +10,9 @@
 // Debug log
 FILE* myLog;
 
+// Total CPU cycles
+int total_cycles = 7;
+
 // It is important to be able to convert an opcode (in range 0x00 to 0xff) to an opcode and an addressing mode.
 // To aid in this, we have two arrays, one which contains the opcodes, and one which contains the address modes.
 // This is the compromise between code that is readable, code that runs fast (accessible in constant time), and code that does not use
@@ -94,18 +97,26 @@ struct Processor* NF_6502_initProcessor() {
 		return 0;
 	}
 
-	newcpu->PC = 0x00;
-	newcpu->A = 0x00;
-	newcpu->X = 0x00;
-	newcpu->Y = 0x00;
-	newcpu->SP = 0xfd;
-	newcpu->P = 0b00100100;
-	newcpu->cycles = 0;
-	newcpu->cycle_count = 7;		// Resetting takes 7 cycles
-	newcpu->page_crossed = false;
-	newcpu->nmi_pending = false;
+	newcpu->bus = NULL;
+	NF_6502_resetState(newcpu);
 	return newcpu;
 
+}
+
+// Put the CPU back into its power-on state. Unlike NF_6502_reset (the reset signal), this clears every register.
+// The bus pointer is kept
+void NF_6502_resetState(struct Processor* CPU) {
+	CPU->PC = 0x00;
+	CPU->A = 0x00;
+	CPU->X = 0x00;
+	CPU->Y = 0x00;
+	CPU->SP = 0xfd;
+	CPU->P = 0b00100100;
+	CPU->cycles = 0;
+	CPU->cycle_count = 7;		// Resetting takes 7 cycles
+	CPU->page_crossed = false;
+	CPU->nmi_pending = false;
+	total_cycles = 7;
 }
 
 // Set one of the processor flags to either 0 or 1. Function exists as a convenience.
@@ -702,7 +713,6 @@ void NF_6502_nmi(struct Processor* CPU) {
 }
 
 
-int total_cycles = 7;
 void NF_6502_tickClock(struct Processor* CPU) {
 
 	// Service a pending NMI between instructions (NF_6502_nmi sets up the 7 cycles the interrupt takes)

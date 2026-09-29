@@ -54,10 +54,10 @@ struct Cartridge {
 
 
 // Load all of the bytes of a file into an array
-uint8_t * NF_readROMtoBuffer(const char* filename);
+uint8_t* NF_readROMtoBuffer(const char* filename);
 
 // Take the buffer returned by NF_reqadROMtoBuffer and turn it into a Cartridge object
-struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data);
+struct Cartridge* NF_createCartridgeFromBuffer(char* rom_data);
 
 // Read PRG ROM from a cartridge
 uint8_t NF_readCartPRG_ROM(struct Cartridge* c, uint16_t address);
@@ -100,5 +100,8 @@ void NF_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram,
 
 // Tick the mapper once per CPU cycle, for mappers that need to keep time
 void NF_tickCart(struct Cartridge* c);
+
+// Free the memory associated with a cartridge
+void NF_freeCartridge(struct Cartridge* c);
 
 #endif

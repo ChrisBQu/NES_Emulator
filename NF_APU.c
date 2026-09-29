@@ -73,7 +73,18 @@ struct AudioProcessingUnit* NF_initAPU() {
 		printf("Error: Could not create APU object. Out of memory?\n");
 		return NULL;
 	}
+	apu->bus = NULL;
+	apu->sample_rate = 44100.0;
+	NF_APU_resetState(apu);
+	return apu;
+}
+
+// Put the APU back into its power-on state. The bus pointer and output sample rate are kept
+void NF_APU_resetState(struct AudioProcessingUnit* apu) {
+	struct NES_Console* bus = apu->bus;
+	double sample_rate = apu->sample_rate;
 	memset(apu, 0, sizeof(struct AudioProcessingUnit));
+	apu->bus = bus;
 
 	apu->pulse1.is_pulse1 = true;
 	apu->noise.shift_register = 1;  // The shift register is loaded with 1 on power-up
@@ -84,8 +95,7 @@ struct AudioProcessingUnit* NF_initAPU() {
 	apu->dmc.sample_buffer_empty = true;
 	apu->dmc.bits_remaining = 8;
 	apu->dmc.silence = true;
-	NF_APU_setSampleRate(apu, 44100.0);
-	return apu;
+	NF_APU_setSampleRate(apu, sample_rate);
 }
 
 // Set the output sample rate, and recompute the high-pass filter coefficient for that rate

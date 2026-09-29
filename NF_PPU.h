@@ -185,6 +185,7 @@ uint8_t NF_PPU_readRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg)
 void NF_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, uint8_t data);
 struct PictureProcessingUnit* NF_initPPU();
 void NF_PPU_tickClock(struct PictureProcessingUnit* ppu);
+void NF_PPU_resetState(struct PictureProcessingUnit* ppu);
 
 // Copy 256 bytes into OAM starting at OAMADDR (used by the OAM DMA at $4014)
 void NF_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page);

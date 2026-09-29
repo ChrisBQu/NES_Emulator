@@ -16,7 +16,10 @@ SDL_Window* CF_getWindow();
 // Set the function to be executed if the user presses the X button of the window
 void CF_setXFunction(void (*funcPtr)(void));
 
-// Can be called once per frame to handle whether or not the user has pressed the X button on the window
-void CF_handleXButtonPresses(SDL_Event e);
+// Can be called once per frame to handle events where the user interactss with the menu
+void CF_handleMenuEvents(SDL_Event e);
+
+// Asssociate a console with the window, so that the menus can access its state
+void CF_pairConsoleToWindow(struct NES_Console* console);
 
 #endif

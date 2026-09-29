@@ -13,43 +13,49 @@ struct PictureProcessingUnit* NF_initPPU() {
 		printf("Error: Could not create PPU object. Out of memory?\n");
 		return 0;
 	}
-	newppu->cycle = 21; // 7 startup cycles for CPU x3 = 21
-	newppu->scanline = 0;
-	newppu->odd_frame = false;
-	newppu->frame_complete = false;
-	newppu->fine_x = 0x00;
-	newppu->reg_OAMDATA = 0x00;
+	newppu->bus = NULL;
+	NF_PPU_resetState(newppu);
+	return newppu;
+}
+
+// Put the PPU back into its power-on state, clearing its registers and memory. The bus pointer is kept
+void NF_PPU_resetState(struct PictureProcessingUnit* ppu) {
+	ppu->cycle = 21; // 7 startup cycles for CPU x3 = 21
+	ppu->scanline = 0;
+	ppu->odd_frame = false;
+	ppu->frame_complete = false;
+	ppu->fine_x = 0x00;
+	ppu->reg_OAMDATA = 0x00;
 
 	// Zero out the registers
-	newppu->reg_PPUCTRL = 0x00;
-	newppu->reg_PPUMASK = 0x00;
-	newppu->reg_PPUSTATUS = 0x00;
-	newppu->reg_OAMADDR = 0x00;
-	newppu->reg_PPUSCROLL = 0x00;
-	newppu->reg_PPUADDR = 0x00;
-	newppu->reg_PPUDATA = 0x00;
-	newppu->delayed_buffer = 0x00;
-	newppu->address_latch = 0x00;
-	newppu->vram_addr.address = 0x0000;
-	newppu->tram_addr.address = 0x0000;
-	memset(newppu->PPU_PaletteMemory,   0, sizeof(newppu->PPU_PaletteMemory));
-	memset(newppu->PPU_NametableMemory, 0, sizeof(newppu->PPU_NametableMemory));
-	memset(newppu->PPU_OAM,             0, sizeof(newppu->PPU_OAM));
-	newppu->bg_next_tile_id     = 0x00;
-	newppu->bg_next_tile_attrib = 0x00;
-	newppu->bg_next_tile_lsb    = 0x00;
-	newppu->bg_next_tile_msb    = 0x00;
-	newppu->bg_shifter_pattern_lo = 0x0000;
-	newppu->bg_shifter_pattern_hi = 0x0000;
-	newppu->bg_shifter_attrib_lo  = 0x0000;
-	newppu->bg_shifter_attrib_hi  = 0x0000;
-	memset(newppu->sprite_scanline, 0xFF, sizeof(newppu->sprite_scanline));
-	memset(newppu->sprite_shifter_pattern_lo, 0, sizeof(newppu->sprite_shifter_pattern_lo));
-	memset(newppu->sprite_shifter_pattern_hi, 0, sizeof(newppu->sprite_shifter_pattern_hi));
-	newppu->sprite_count = 0;
-	newppu->sprite_zero_on_line = false;
-	newppu->sprite_zero_being_drawn = false;
-	return newppu;
+	ppu->reg_PPUCTRL = 0x00;
+	ppu->reg_PPUMASK = 0x00;
+	ppu->reg_PPUSTATUS = 0x00;
+	ppu->reg_OAMADDR = 0x00;
+	ppu->reg_PPUSCROLL = 0x00;
+	ppu->reg_PPUADDR = 0x00;
+	ppu->reg_PPUDATA = 0x00;
+	ppu->delayed_buffer = 0x00;
+	ppu->address_latch = 0x00;
+	ppu->vram_addr.address = 0x0000;
+	ppu->tram_addr.address = 0x0000;
+	memset(ppu->PPU_PaletteMemory,   0, sizeof(ppu->PPU_PaletteMemory));
+	memset(ppu->PPU_NametableMemory, 0, sizeof(ppu->PPU_NametableMemory));
+	memset(ppu->PPU_OAM,             0, sizeof(ppu->PPU_OAM));
+	ppu->bg_next_tile_id     = 0x00;
+	ppu->bg_next_tile_attrib = 0x00;
+	ppu->bg_next_tile_lsb    = 0x00;
+	ppu->bg_next_tile_msb    = 0x00;
+	ppu->bg_shifter_pattern_lo = 0x0000;
+	ppu->bg_shifter_pattern_hi = 0x0000;
+	ppu->bg_shifter_attrib_lo  = 0x0000;
+	ppu->bg_shifter_attrib_hi  = 0x0000;
+	memset(ppu->sprite_scanline, 0xFF, sizeof(ppu->sprite_scanline));
+	memset(ppu->sprite_shifter_pattern_lo, 0, sizeof(ppu->sprite_shifter_pattern_lo));
+	memset(ppu->sprite_shifter_pattern_hi, 0, sizeof(ppu->sprite_shifter_pattern_hi));
+	ppu->sprite_count = 0;
+	ppu->sprite_zero_on_line = false;
+	ppu->sprite_zero_being_drawn = false;
 }
 
 // Copy 256 bytes into OAM starting at OAMADDR (wrapping around), as the OAM DMA at $4014 does

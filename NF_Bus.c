@@ -183,3 +183,20 @@ void NF_busTickMasterClock(struct NES_Console* console, bool startup_ready) {
 		NF_PPU_tickClock(console->ConnectedPPU);
 	}
 }
+
+void NF_removeCartridge(struct NES_Console* console) {
+	if (console->ConnectedCartridge != NULL) {
+		NF_freeCartridge(console->ConnectedCartridge);
+		console->ConnectedCartridge = NULL;
+	}
+	console->ConnectedProcessor->PC = (NF_readMemory(console, NF_6502_RESET_VECTOR + 1) << 8) | NF_readMemory(console, NF_6502_RESET_VECTOR);
+}
+
+void NF_resetConsoleState(struct NES_Console* console) {
+	NF_removeCartridge(console);
+	memset(console->Memory, 0, 0x10000);
+	NF_6502_resetState(console->ConnectedProcessor);
+	NF_PPU_resetState(console->ConnectedPPU);
+	NF_APU_resetState(console->ConnectedAPU);
+	console->ConnectedProcessor->cycle_count = 0;
+}

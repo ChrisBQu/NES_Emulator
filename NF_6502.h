@@ -78,6 +78,8 @@ typedef enum {
 } FLAG_6502;
 
 struct Processor * NF_6502_initProcessor();
+
+void NF_6502_resetState(struct Processor* CPU);
 void NF_6502_tickClock(struct Processor *CPU);
 void NF_6502_reset(struct Processor* CPU);
 void NF_6502_irq(struct Processor* CPU);

@@ -11,10 +11,7 @@
 
 bool MAIN = true;
 SDL_Event e;
-
-// Change this to SDL_Renderer* for proper SDL rendering
 SDL_Renderer* screenRenderer;
-
 int scanline;
 int cycle;
 uint16_t startup_cycles = 0;
@@ -70,6 +67,7 @@ int main(int arc, char* args[]) {
     controller_init_default_bindings(controller_p1);
 
     if (console == 0) { return 1; }
+    CF_pairConsoleToWindow(console);
 
     // Create a function to receive video output from the emulator
     console->imageOutFunc = *receivePixel;
@@ -138,8 +136,8 @@ int main(int arc, char* args[]) {
     while (MAIN) {
 
         // Pass the events to places that need them
-        while (SDL_PollEvent(&e) != 0) { 
-            CF_handleXButtonPresses(e); 
+        while (SDL_PollEvent(&e) != 0) {
+            CF_handleMenuEvents(e);
             controller_handle_input(controller_p1, e);
             controller_handle_input(controller_p2, e);
         }

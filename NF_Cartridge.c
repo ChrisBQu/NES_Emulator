@@ -264,3 +264,12 @@ void NF_tickCart(struct Cartridge* c) {
 	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
 	if (MapperList[c->mapper].tick != NULL) { MapperList[c->mapper].tick(c); }
 }
+
+void NF_freeCartridge(struct Cartridge* c) {
+	if (c == NULL) { return; }
+	if (c->prg_rom != NULL) { free(c->prg_rom); }
+	if (c->chr_rom != NULL) { free(c->chr_rom); }
+	if (c->prg_ram != NULL) { free(c->prg_ram); }
+	if (c->mapper_state != NULL) { free(c->mapper_state); }
+	free(c);
+}

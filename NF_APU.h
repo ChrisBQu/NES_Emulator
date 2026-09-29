@@ -122,6 +122,9 @@ struct AudioProcessingUnit {
 // Must be called once to create the APU object
 struct AudioProcessingUnit* NF_initAPU();
 
+// Put the APU back into its power-on state. The output sample rate is kept
+void NF_APU_resetState(struct AudioProcessingUnit* apu);
+
 // Set the rate of the samples sent to the console's audioOutFunc (e.g. 44100)
 void NF_APU_setSampleRate(struct AudioProcessingUnit* apu, double sample_rate);
 

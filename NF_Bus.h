@@ -46,6 +46,9 @@ struct NES_Console* NF_initConsole();
 // Connect a cartridge to the console. This function also places the Program Counter at the Reset vector
 int NF_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
 
+// Removes a cartridge from the console, and frees the memory associated with it. Also resets thhe state of the console.
+void NF_removeCartridge(struct NES_Console* console);
+
 // Send out one clock tick. This will advance both the CPU and the PPU appropriately
 void NF_busTickMasterClock(struct NES_Console* console, bool startup_ready);
 
@@ -63,5 +66,8 @@ uint8_t NF_readMemory(struct NES_Console* console, uint16_t address);
 
 // Read from the CPU memory address without side effects (PPU registers read as 0)
 uint8_t NF_peekMemory(struct NES_Console* console, uint16_t address);
+
+// Reset the console to its initial state
+void NF_resetConsoleState(struct NES_Console* console);
 
 #endif
