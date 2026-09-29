@@ -47,10 +47,13 @@ struct NES_Console* NF_initConsole();
 int NF_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
 
 // Send out one clock tick. This will advance both the CPU and the PPU appropriately
-void NF_busTickMasterClock(struct NES_Console* console, bool r);
+void NF_busTickMasterClock(struct NES_Console* console, bool startup_ready);
 
 // Call the NMI function from the processor (this exists so that the PPU can send a signal to trigger it without being exposed to the CPU directly)
 void NF_emitNMI(struct NES_Console* console);
+
+// Check whether anything on the bus is holding the CPU's IRQ line low
+bool NF_isIRQAsserted(struct NES_Console* console);
 
 // Write to the CPU memory address
 void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value);

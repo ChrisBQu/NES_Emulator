@@ -109,11 +109,8 @@ void controller_bind_stick_to_button(Controller* controller, int from_stick, int
 void controller_init_default_bindings(Controller* controller) {
 	controller_bind_key_to_button(controller, SDLK_a, SDL_CONTROLLER_BUTTON_Y);
 	controller_bind_key_to_button(controller, SDLK_s, SDL_CONTROLLER_BUTTON_X);
-	controller_bind_key_to_button(controller, SDLK_s, SDL_CONTROLLER_BUTTON_X);
 	controller_bind_key_to_button(controller, SDLK_d, SDL_CONTROLLER_BUTTON_B);
 	controller_bind_key_to_button(controller, SDLK_f, SDL_CONTROLLER_BUTTON_A);
-	controller_bind_key_to_button(controller, SDLK_z, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-	controller_bind_key_to_button(controller, SDLK_x, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
 	controller_bind_key_to_button(controller, SDLK_RETURN, SDL_CONTROLLER_BUTTON_START);
 	controller_bind_key_to_button(controller, SDLK_LSHIFT, SDL_CONTROLLER_BUTTON_BACK);
 	controller_bind_key_to_button(controller, SDLK_UP, SDL_CONTROLLER_BUTTON_DPAD_UP);

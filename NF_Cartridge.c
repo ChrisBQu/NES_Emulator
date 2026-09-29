@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "NF_Cartridge.h"
+#include "Mappers/Mapper.h"
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
@@ -8,6 +9,7 @@
 #define PRG_ROM_BLOCK_SIZE 16384
 #define CHR_ROM_BLOCK_SIZE 8192
 #define TRAINER_BLOCK_SIZE 512
+#define PRG_RAM_SIZE 8192
 
 // Take byte data stored in a character array, and parse the ROM into a Cartridge structure
 struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
@@ -71,13 +73,37 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 		return 0;
 	}
 
+	// Every board gets 8KB of PRG RAM. Boards without any would read open bus there, which games don't rely on
+	Cart->prg_ram = calloc(PRG_RAM_SIZE, 1);
+	if (Cart->prg_ram == NULL) {
+		printf("Error: Could not create cartridge object. Could not create PRG RAM buffer. Out of memory?\n");
+		free(Cart->chr_rom);
+		free(Cart->prg_rom);
+		free(Cart);
+		return 0;
+	}
+
 	// Copy the PRG ROM and CHR ROM blocks to the cartridge object
 	memcpy(Cart->prg_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0)], PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks);
 	if (Cart->chr_rom_blocks == 0) { memset(Cart->chr_rom, 0, CHR_ROM_BLOCK_SIZE); }
 	else { memcpy(Cart->chr_rom, &rom_data[16 + (Cart->has_trainer ? TRAINER_BLOCK_SIZE : 0) + PRG_ROM_BLOCK_SIZE * Cart->prg_rom_blocks], CHR_ROM_BLOCK_SIZE * Cart->chr_rom_blocks); }
 
-	if (Cart->mapper != 0) {
-		printf("Warning: Mapper %d is not supported. Only mapper 0 (NROM) is implemented, so this game will likely not run correctly.\n", Cart->mapper);
+	Cart->mapper_state = NULL;
+	Cart->irq_asserted = false;
+	if (Cart->mapper >= MAPPER_COUNT) {
+		printf("Error: Mapper %d is not supported.\n", Cart->mapper);
+		free(Cart->prg_ram);
+		free(Cart->chr_rom);
+		free(Cart->prg_rom);
+		free(Cart);
+		return NULL;
+	}
+	if (!MapperList[Cart->mapper].init(Cart)) {
+		free(Cart->prg_ram);
+		free(Cart->chr_rom);
+		free(Cart->prg_rom);
+		free(Cart);
+		return NULL;
 	}
 
 	return Cart;
@@ -114,11 +140,59 @@ uint8_t NF_readCartPRG_ROM(struct Cartridge *c, uint16_t address) {
 		return 0;
 	}
 
-	// Mapper 0
-	// If there's 32 KB of prg_rom, it uses the whole address space. Otherwise, if there's 16KB, it's mirrored
-	// into both $8000-$BFFF and $C000-$FFFF
-	if (c->prg_rom_blocks == 2) { return c->prg_rom[(address - 0x8000) & 0x7FFF]; }
-	else { return c->prg_rom[(address - 0x8000) & 0x3FFF]; }
+	if (c->mapper < MAPPER_COUNT) {
+		return MapperList[c->mapper].readPRG_ROM(c, address);
+	}
+	else {
+		printf("Error: Mapper %d is not supported, so this game will likely not run correctly.\n", c->mapper);
+		return 0;
+	}
+}
+
+void NF_writeCartPRG(struct Cartridge* c, uint16_t address, uint8_t data, uint64_t cpu_cycle) {
+
+	if (c == NULL) {
+		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write PRG function.\n");
+		return;
+	}
+
+	if (c->mapper < MAPPER_COUNT) {
+		MapperList[c->mapper].writePRG(c, address, data, cpu_cycle);
+	}
+	else {
+		printf("Error: Mapper %d is not supported, so this game will likely not run correctly.\n", c->mapper);
+	}
+}
+
+uint8_t NF_readCartPRG_RAM(struct Cartridge* c, uint16_t address) {
+
+	if (c == NULL) {
+		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to read PRG RAM function.\n");
+		return 0;
+	}
+
+	if (c->mapper < MAPPER_COUNT) {
+		return MapperList[c->mapper].readPRG_RAM(c, address);
+	}
+	else {
+		printf("Error: Mapper %d is not supported, so this game will likely not run correctly.\n", c->mapper);
+		return 0;
+	}
+}
+
+void NF_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data) {
+
+	if (c == NULL) {
+		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write PRG RAM function.\n");
+		return;
+	}
+
+	if (c->mapper < MAPPER_COUNT) {
+		MapperList[c->mapper].writePRG_RAM(c, address, data);
+	}
+	else {
+		printf("Error: Mapper %d is not supported, so this game will likely not run correctly.\n", c->mapper);
+	}
 }
 
 uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
@@ -128,8 +202,13 @@ uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
 		return 0;
 	}
 
-	// Mapper 0
-	return c->chr_rom[address & 0x1FFF];
+	if (c->mapper < MAPPER_COUNT) {
+		return MapperList[c->mapper].readCHR_ROM(c, address);
+	}
+	else {
+		printf("Error: Mapper %d is not supported, so this game will likely not run correctly.\n", c->mapper);
+		return 0;
+	}
 }
 
 void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data) {
@@ -138,7 +217,50 @@ void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write CHR function.\n");
 		return;
 	}
+	if (c->mapper < MAPPER_COUNT) {
+		MapperList[c->mapper].writeCHR(c, address, data);
+		return;
+	}
+	else {
+		printf("Error: Mapper %d is not supported, so this game will likely not run correctly.\n", c->mapper);
+	}
+}
 
-	// Mapper 0: only CHR RAM is writable. Writes to CHR ROM are ignored
-	if (c->chr_rom_blocks == 0) { c->chr_rom[address & 0x1FFF] = data; }
+// Some mappers, such as MMC3, watch the PPU address bus to count scanlines. For such carts, pass along every address the PPU drives
+void NF_notifyCartPPUAddress(struct Cartridge* c, uint16_t address, uint64_t cpu_cycle) {
+	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
+	if (MapperList[c->mapper].notifyPPUAddress != NULL) { MapperList[c->mapper].notifyPPUAddress(c, address, cpu_cycle); }
+}
+
+void NF_notifyCartPPURegisterWrite(struct Cartridge* c, uint16_t address, uint8_t data) {
+	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
+	if (MapperList[c->mapper].notifyPPURegisterWrite != NULL) { MapperList[c->mapper].notifyPPURegisterWrite(c, address, data); }
+}
+
+uint8_t NF_readCartExpansion(struct Cartridge* c, uint16_t address) {
+	// Nothing drives the bus here on most boards, so reads return open bus. The last byte on the bus is usually the high byte of the address
+	if (c == NULL || c->mapper >= MAPPER_COUNT || MapperList[c->mapper].readExpansion == NULL) { return address >> 8; }
+	return MapperList[c->mapper].readExpansion(c, address);
+}
+
+void NF_writeCartExpansion(struct Cartridge* c, uint16_t address, uint8_t data) {
+	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
+	if (MapperList[c->mapper].writeExpansion != NULL) { MapperList[c->mapper].writeExpansion(c, address, data); }
+}
+
+bool NF_cartMapsNametables(struct Cartridge* c) {
+	return c != NULL && c->mapper < MAPPER_COUNT && MapperList[c->mapper].readNametable != NULL;
+}
+
+uint8_t NF_readCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram) {
+	return MapperList[c->mapper].readNametable(c, offset, ciram);
+}
+
+void NF_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram, uint8_t data) {
+	MapperList[c->mapper].writeNametable(c, offset, ciram, data);
+}
+
+void NF_tickCart(struct Cartridge* c) {
+	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
+	if (MapperList[c->mapper].tick != NULL) { MapperList[c->mapper].tick(c); }
 }

@@ -20,10 +20,24 @@ int cycle;
 uint16_t startup_cycles = 0;
 bool startup_ready = false;
 
+// The emulator draws into this buffer one pixel at a time, and it is uploaded to screenTexture once per frame.
+// Pixels are ARGB8888 (0xAARRGGBB), matching the texture format
+#define SCREEN_WIDTH 256
+#define SCREEN_HEIGHT 240
+#define SCREEN_SCALE 2
+#define SCALED_WIDTH (SCREEN_WIDTH * SCREEN_SCALE)
+#define SCALED_HEIGHT (SCREEN_HEIGHT * SCREEN_SCALE)
+uint32_t framebuffer[SCALED_WIDTH * SCALED_HEIGHT];
+SDL_Texture* screenTexture;
+
 // Create a rendering function that will plug into the emulator
+// Each NES pixel fills a block of the framebuffer of a size (SCREEN_SCALE * SCREEN_SCALE)
 void receivePixel(struct NF_Pixel pxl) {
-    SDL_SetRenderDrawColor(screenRenderer, pxl.r, pxl.g, pxl.b, SDL_ALPHA_OPAQUE);
-    SDL_RenderDrawPoint(screenRenderer, pxl.x, pxl.y);
+    uint32_t color = 0xFF000000u | ((uint32_t)pxl.r << 16) | ((uint32_t)pxl.g << 8) | pxl.b;
+    uint32_t* block = &framebuffer[(pxl.y * SCREEN_SCALE) * SCALED_WIDTH + pxl.x * SCREEN_SCALE];
+    for (int dy = 0; dy < SCREEN_SCALE; dy++) {
+        for (int dx = 0; dx < SCREEN_SCALE; dx++) { block[dy * SCALED_WIDTH + dx] = color; }
+    }
     scanline = pxl.y;
     cycle = pxl.x;
 }
@@ -46,7 +60,7 @@ void quitFunc() { MAIN = false; }
 int main(int arc, char* args[]) {
 
     // Initialize ROM and NES
-    uint8_t* rom_data = NF_readROMtoBuffer("DK.nes"); // Or any other legal ROM.
+    uint8_t* rom_data = NF_readROMtoBuffer("CV3.nes"); // Or any other legal ROM.
     if (rom_data == NULL) { return 1; }
 
     struct Cartridge* game_cart = NF_createCartridgeFromBuffer(rom_data);
@@ -63,7 +77,7 @@ int main(int arc, char* args[]) {
     if (NF_insertCartridge(console, game_cart) == 1) { return 1; }
 
     // Initialize SDL window and renderer
-    CF_init("NES Emulator", 256, 240);
+    CF_init("NES Emulator", SCALED_WIDTH, SCALED_HEIGHT);
 
     // Correctly create the renderer
     int v = SDL_Init(SDL_INIT_VIDEO);
@@ -74,6 +88,13 @@ int main(int arc, char* args[]) {
     }
     if (!screenRenderer) {
         printf("Error: SDL_Renderer could not be created! SDL Error: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    // A streaming texture is updated from the CPU every frame
+    screenTexture = SDL_CreateTexture(screenRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCALED_WIDTH, SCALED_HEIGHT);
+    if (screenTexture == NULL) {
+        printf("Error: Screen texture could not be created! SDL Error: %s\n", SDL_GetError());
         return -1;
     }
 
@@ -164,14 +185,16 @@ int main(int arc, char* args[]) {
             next_frame_time += frame_ticks;
         }
 
-        // Present the completed frame, then clear for the next one
+        // Upload the completed frame and present it
+        SDL_UpdateTexture(screenTexture, NULL, framebuffer, SCALED_WIDTH * sizeof(uint32_t));
+        SDL_RenderCopy(screenRenderer, screenTexture, NULL, NULL);
         SDL_RenderPresent(screenRenderer);
-        SDL_SetRenderDrawColor(screenRenderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-        SDL_RenderClear(screenRenderer);
     }
 
     // Clean up and exit
     if (audio_device != 0) { SDL_CloseAudioDevice(audio_device); }
+    SDL_DestroyTexture(screenTexture);
+    SDL_DestroyRenderer(screenRenderer);
     CF_exit();
 
     return 0;

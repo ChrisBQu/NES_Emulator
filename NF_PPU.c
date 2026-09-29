@@ -59,9 +59,23 @@ void NF_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page) 
 	}
 }
 
+// Helper function
+// The cartridge can see every address the PPU puts on its external bus, and some mappers (MMC3) watch it to count scanlines.
+static void PPU_driveBus(struct PictureProcessingUnit* ppu, uint16_t addr) {
+	if (addr >= 0x3F00) { return; }
+	NF_notifyCartPPUAddress(ppu->bus->ConnectedCartridge, addr, ppu->bus->ConnectedProcessor->cycle_count);
+}
+
+// Helper function
+// Rendering is active on the visible and pre-render scanlines while the background or sprites are enabled
+static bool PPU_isRendering(struct PictureProcessingUnit* ppu) {
+	return (ppu->reg_PPUMASK & 0x18) && (ppu->scanline < 240 || ppu->scanline == 261);
+}
+
 // Write to the PPU address space
 void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_t data) {
 	addr &= 0x3FFF;  // Mask to the PPU address space (0x0000 - 0x3FFF)
+	PPU_driveBus(ppu, addr);
 
 	// Handle pattern table writes (only possible on boards that use CHR RAM instead of CHR ROM)
 	if (addr < NAMETABLE_0_ADDRESS) {
@@ -79,6 +93,12 @@ void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_
 		// Convert from PPU address space to a nametable-relative offset (0x000-0xFFF)
 		addr -= 0x2000;
 
+		// Some mappers (MMC5) re-route where nametables come from
+		if (NF_cartMapsNametables(ppu->bus->ConnectedCartridge)) {
+			NF_writeCartNametable(ppu->bus->ConnectedCartridge, addr, ppu->PPU_NametableMemory, data);
+			return;
+		}
+
 		// Nametable mirroring based on cartridge configuration (Horizontal/Vertical)
 		// We have 2KB of physical nametable RAM split into two 1KB pages:
 		//   Page 0: PPU_NametableMemory[0x000-0x3FF]
@@ -95,6 +115,14 @@ void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_
 		else if (ppu->bus->ConnectedCartridge->nametable_mirroring == VERTICAL_MAPPING) {
 			// Vertical: NT0 and NT2 share page 0; NT1 and NT3 share page 1
 			ppu->PPU_NametableMemory[addr & 0x07FF] = data;
+		}
+		else if (ppu->bus->ConnectedCartridge->nametable_mirroring == SINGLE_SCREEN_LOWER_MAPPING) {
+			// Single screen: all four nametables share page 0
+			ppu->PPU_NametableMemory[addr & 0x03FF] = data;
+		}
+		else if (ppu->bus->ConnectedCartridge->nametable_mirroring == SINGLE_SCREEN_UPPER_MAPPING) {
+			// Single screen: all four nametables share page 1
+			ppu->PPU_NametableMemory[(addr & 0x03FF) + 0x400] = data;
 		}
 	}
 
@@ -120,6 +148,7 @@ void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_
 // Read from the PPU address space
 uint8_t NF_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
     addr &= 0x3FFF;  // Mask to the PPU address space (0x0000 - 0x3FFF)
+    PPU_driveBus(ppu, addr);
 
     // Handle cartridge CHR-ROM reads
     if (addr < NAMETABLE_0_ADDRESS) {
@@ -136,6 +165,11 @@ uint8_t NF_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
         // Convert from PPU address space to a nametable-relative offset (0x000-0xFFF)
         addr -= 0x2000;
 
+        // Some mappers (MMC5) decide where each nametable comes from themselves
+        if (NF_cartMapsNametables(ppu->bus->ConnectedCartridge)) {
+            return NF_readCartNametable(ppu->bus->ConnectedCartridge, addr, ppu->PPU_NametableMemory);
+        }
+
         // Nametable mirroring based on cartridge configuration (Horizontal/Vertical)
         if (ppu->bus->ConnectedCartridge->nametable_mirroring == HORIZONTAL_MAPPING) {
             // Horizontal: NT0 and NT1 share page 0; NT2 and NT3 share page 1
@@ -147,6 +181,12 @@ uint8_t NF_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
         } else if (ppu->bus->ConnectedCartridge->nametable_mirroring == VERTICAL_MAPPING) {
             // Vertical: NT0 and NT2 share page 0; NT1 and NT3 share page 1
             return ppu->PPU_NametableMemory[addr & 0x07FF];
+        } else if (ppu->bus->ConnectedCartridge->nametable_mirroring == SINGLE_SCREEN_LOWER_MAPPING) {
+            // Single screen: all four nametables share page 0
+            return ppu->PPU_NametableMemory[addr & 0x03FF];
+        } else if (ppu->bus->ConnectedCartridge->nametable_mirroring == SINGLE_SCREEN_UPPER_MAPPING) {
+            // Single screen: all four nametables share page 1
+            return ppu->PPU_NametableMemory[(addr & 0x03FF) + 0x400];
         }
     }
 
@@ -259,6 +299,9 @@ void NF_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, u
 			ppu->tram_addr.address = (ppu->tram_addr.address & 0xFF00) | data;
 			ppu->vram_addr.address = ppu->tram_addr.address;
 			ppu->address_latch = 0;
+
+			// Outside of rendering, the VRAM address sits on the bus. Some games toggle A12 this way to tick the MMC3 counter
+			if (!PPU_isRendering(ppu)) { PPU_driveBus(ppu, ppu->vram_addr.address & 0x3FFF); }
 		}
 		break;
 	case REG_PPUDATA:
@@ -386,36 +429,49 @@ static void PPU_evaluateSprites(struct PictureProcessingUnit* ppu) {
 }
 
 // Helper for sprite rendering
-// Fetch the pattern row of every sprite selected for the next scanline into the sprite shift registers
-static void PPU_fetchSpritePatterns(struct PictureProcessingUnit* ppu) {
-    for (int i = 0; i < ppu->sprite_count; i++) {
-        struct NF_SpriteEntry* s = &ppu->sprite_scanline[i];
-        uint8_t row = (uint8_t)(ppu->scanline - s->y);
-        bool flip_vertical = (s->attr & 0x80) != 0;
-        uint16_t addr;
+// Find the pattern table address of one row of a sprite's tile
+static uint16_t PPU_spritePatternAddress(struct PictureProcessingUnit* ppu, uint8_t id, uint8_t attr, uint8_t row) {
+    bool flip_vertical = (attr & 0x80) != 0;
 
-        if (!(ppu->reg_PPUCTRL & 0x20)) {
-            // 8x8 sprites: PPUCTRL bit 3 selects the pattern table
-            if (flip_vertical) { row = 7 - row; }
-            addr = ((ppu->reg_PPUCTRL & 0x08) ? 0x1000 : 0x0000) | ((uint16_t)s->id << 4) | row;
-        }
-        else {
-            // 8x16 sprites: bit 0 of the tile index selects the pattern table, and the sprite uses tiles (id & 0xFE) and (id & 0xFE) + 1
-            if (flip_vertical) { row = 15 - row; }
-            uint8_t tile = (s->id & 0xFE) + (row >= 8 ? 1 : 0);
-            addr = ((s->id & 0x01) ? 0x1000 : 0x0000) | ((uint16_t)tile << 4) | (row & 0x07);
-        }
+    // 8x8 sprites: PPUCTRL bit 3 selects the pattern table
+    if (!(ppu->reg_PPUCTRL & 0x20)) {
+        if (flip_vertical) { row = 7 - row; }
+        return ((ppu->reg_PPUCTRL & 0x08) ? 0x1000 : 0x0000) | ((uint16_t)id << 4) | row;
+    }
 
-        uint8_t lo = NF_PPU_readMemory(ppu, addr);
-        uint8_t hi = NF_PPU_readMemory(ppu, addr + 8);
+    // 8x16 sprites: bit 0 of the tile index selects the pattern table, and the sprite uses tiles (id & 0xFE) and (id & 0xFE) + 1
+    if (flip_vertical) { row = 15 - row; }
+    uint8_t tile = (id & 0xFE) + (row >= 8 ? 1 : 0);
+    return ((id & 0x01) ? 0x1000 : 0x0000) | ((uint16_t)tile << 4) | (row & 0x07);
+}
 
-        // Horizontal flip: reverse the row so the leftmost pixel is always in bit 7
-        if (s->attr & 0x40) {
-            lo = PPU_reverseBits(lo);
-            hi = PPU_reverseBits(hi);
+// Helper for sprite rendering
+// Cycles 257-320 fetch the patterns for the next scanline's sprites, taking 8 cycles for each of the 8 slots. Like background tiles, each
+// slot makes two (garbage) nametable fetches and then fetches the low and high pattern bytes. Empty slots still fetch tile $FF and throw
+// the result away. Mappers that count scanlines with PPU A12 rely on these fetches happening even when there are no sprites
+static void PPU_fetchSpriteSlot(struct PictureProcessingUnit* ppu) {
+    int slot = (ppu->cycle - 257) / 8;
+    bool used = slot < ppu->sprite_count;
+    struct NF_SpriteEntry* s = &ppu->sprite_scanline[slot];
+    uint16_t addr = used ? PPU_spritePatternAddress(ppu, s->id, s->attr, (uint8_t)(ppu->scanline - s->y))
+                         : PPU_spritePatternAddress(ppu, 0xFF, 0x00, 0);
+
+    switch ((ppu->cycle - 257) % 8) {
+        case 0:
+        case 2:
+            NF_PPU_readMemory(ppu, 0x2000 | (ppu->vram_addr.address & 0x0FFF));
+            break;
+        case 4: {
+            // Horizontal flip: reverse the row so the leftmost pixel is always in bit 7
+            uint8_t lo = NF_PPU_readMemory(ppu, addr);
+            if (used) { ppu->sprite_shifter_pattern_lo[slot] = (s->attr & 0x40) ? PPU_reverseBits(lo) : lo; }
+            break;
         }
-        ppu->sprite_shifter_pattern_lo[i] = lo;
-        ppu->sprite_shifter_pattern_hi[i] = hi;
+        case 6: {
+            uint8_t hi = NF_PPU_readMemory(ppu, addr + 8);
+            if (used) { ppu->sprite_shifter_pattern_hi[slot] = (s->attr & 0x40) ? PPU_reverseBits(hi) : hi; }
+            break;
+        }
     }
 }
 
@@ -457,6 +513,9 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
     // Pre-render scanline (261) and visible scanlines (0-239) share most rendering logic
     if (ppu->scanline == 261 || (ppu->scanline >= 0 && ppu->scanline < 240)) {
 
+        // The PPU makes no memory fetches while rendering is disabled, so nothing appears on the bus for mappers to see
+        bool rendering = (ppu->reg_PPUMASK & 0x18) != 0;
+
         // Clear status flags at the very start of the pre-render scanline
         if (ppu->scanline == 261 && ppu->cycle == 1) {
             ppu->reg_PPUSTATUS &= ~0x80;  // VBlank
@@ -464,8 +523,15 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
             ppu->reg_PPUSTATUS &= ~0x20;  // Sprite overflow
         }
 
-        // Background tile fetch pipeline: cycles 2-257 (visible + one extra) and 321-337 (prefetch next scanline's first two tiles)
-        if ((ppu->cycle >= 2 && ppu->cycle < 258) || (ppu->cycle >= 321 && ppu->cycle < 338)) {
+        // The nametable fetch for the third tile. It already happened at cycle 340 (so v hasn't moved since), but real hardware
+        // fetches it here, and MMC5 detects the start of a scanline by seeing this address read three times in a row
+        if (rendering && ppu->cycle == 1) {
+            ppu->bg_next_tile_id = NF_PPU_readMemory(ppu, 0x2000 | (ppu->vram_addr.address & 0x0FFF));
+        }
+
+        // Background tile fetch pipeline: cycles 2-256 (visible) and 321-337 (prefetch next scanline's first two tiles).
+        // Cycle 257 is left to the sprite fetches, which start with a nametable fetch of their own
+        if (rendering && ((ppu->cycle >= 2 && ppu->cycle < 257) || (ppu->cycle >= 321 && ppu->cycle < 338))) {
             PPU_updateShifters(ppu);
 
             // Each group of 8 cycles fetches one tile's worth of data in four steps
@@ -531,12 +597,12 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
         }
 
         // Fetch the pattern data for the sprites selected for the next scanline
-        if (ppu->cycle == 340 && ppu->scanline < 240) {
-            PPU_fetchSpritePatterns(ppu);
+        if (rendering && ppu->cycle >= 257 && ppu->cycle <= 320) {
+            PPU_fetchSpriteSlot(ppu);
         }
 
         // Dummy nametable fetches at end of scanline (cycles 338 and 340)
-        if (ppu->cycle == 338 || ppu->cycle == 340) {
+        if (rendering && (ppu->cycle == 338 || ppu->cycle == 340)) {
             ppu->bg_next_tile_id = NF_PPU_readMemory(ppu,
                 0x2000 | (ppu->vram_addr.address & 0x0FFF));
         }

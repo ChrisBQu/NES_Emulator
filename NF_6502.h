@@ -52,6 +52,7 @@ struct Processor {
 
 	// Variables that will help in emulating its functionality
 	uint16_t cycles;				// Number of cycles needed to finish performing the operation being executed (16-bit to fit the 513-cycle OAM DMA stall)
+	uint64_t cycle_count;			// Total CPU cycles since power on. Every write in an instruction happens on the tick the instruction starts
 	OPCODE_6502 opcode;			    // Opcode currently being executed
 	ADDRESS_MODE_6502 addr_mode;    // Address mode being used by the current opcode
 	uint8_t fetched;

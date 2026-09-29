@@ -55,8 +55,10 @@ void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value
 	if (address <= 0x1FFF) { console->Memory[address % 0x800] = value; }
 
 	// PPU register addresses are also mirrored repeatedly
+	// Some mappers (MMC5) also watch these writes
 	else if (address >= 0x2000 && address <= 0x3FFF) {
 		NF_PPU_writeRegister(console->ConnectedPPU, (PPU_REGISTER)(address % 0x08), value);
+		NF_notifyCartPPURegisterWrite(console->ConnectedCartridge, address, value);
 	}
 
 	// OAM DMA: copy the 256-byte page $XX00-$XXFF into the PPU's OAM. The CPU is halted while this happens
@@ -83,8 +85,20 @@ void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value
 		NF_APU_writeRegister(console->ConnectedAPU, address, value);
 	}
 
-	// Reading PRG Rom from the cartridge
-	else if (address >= NF_6502_ROM_LOCATION) { /* Cannot do anything to ROM */ }
+	// Cartridge expansion area, where some mappers (MMC5) have registers and RAM
+	else if (address >= 0x4020 && address < 0x6000) {
+		NF_writeCartExpansion(console->ConnectedCartridge, address, value);
+	}
+
+	// PRG RAM on the cartridge
+	else if (address >= 0x6000 && address < NF_6502_ROM_LOCATION) {
+		NF_writeCartPRG_RAM(console->ConnectedCartridge, address, value);
+	}
+
+	// ROM itself can't be written, but mappers watch writes to this range to set their registers
+	else if (address >= NF_6502_ROM_LOCATION) {
+		NF_writeCartPRG(console->ConnectedCartridge, address, value, console->ConnectedProcessor->cycle_count);
+	}
 
 	else { console->Memory[address] = value; }
 }
@@ -118,6 +132,16 @@ uint8_t NF_readMemory(struct NES_Console* console, uint16_t address) {
 		return 0x40 | bit;
 	}
 
+	// Cartridge expansion area, where some mappers (MMC5) have registers and RAM
+	else if (address >= 0x4020 && address < 0x6000) {
+		return NF_readCartExpansion(console->ConnectedCartridge, address);
+	}
+
+	// PRG RAM on the cartridge
+	else if (address >= 0x6000 && address < NF_6502_ROM_LOCATION) {
+		return NF_readCartPRG_RAM(console->ConnectedCartridge, address);
+	}
+
 	// Reading PRG Rom from the cartridge
 	else if (address >= NF_6502_ROM_LOCATION) {
 		return NF_readCartPRG_ROM(console->ConnectedCartridge, address);
@@ -132,6 +156,7 @@ uint8_t NF_peekMemory(struct NES_Console* console, uint16_t address) {
 	if (address >= 0x2000 && address <= 0x3FFF) { return 0x00; }
 	if (address == 0x4015) { return 0x00; }  // Reading APU status clears the frame IRQ flag
 	if (address == 0x4016 || address == 0x4017) { return 0x40 | (console->ConnectedControllerPort->controller_shift[address - 0x4016] & 0x01); }  // Reading shifts the controller
+	if (address >= 0x4020 && address < 0x6000) { return 0x00; }  // Mapper registers here can have read side effects (MMC5's $5204 acknowledges its IRQ)
 	return NF_readMemory(console, address);
 }
 
@@ -141,11 +166,18 @@ void NF_emitNMI(struct NES_Console* console) {
 	console->ConnectedProcessor->nmi_pending = true;
 }
 
+//When the IRQ line is level triggered: it stays asserted until whatever pulled it low (currently only the cartridge) acknowledges it
+bool NF_isIRQAsserted(struct NES_Console* console) {
+	return console->ConnectedCartridge != NULL && console->ConnectedCartridge->irq_asserted;
+}
+
 // The NES uses a single master clock, and for every 3 ticks of the PPU, the CPU has one tick
-void NF_busTickMasterClock(struct NES_Console* console, bool r) {
-	if (r) {
+// The startup_ready flag is used to skip the startup cycles
+void NF_busTickMasterClock(struct NES_Console* console, bool startup_ready) {
+	if (startup_ready) {
 		NF_6502_tickClock(console->ConnectedProcessor);
 		NF_APU_tickClock(console->ConnectedAPU);
+		NF_tickCart(console->ConnectedCartridge);
 		NF_PPU_tickClock(console->ConnectedPPU);
 		NF_PPU_tickClock(console->ConnectedPPU);
 		NF_PPU_tickClock(console->ConnectedPPU);

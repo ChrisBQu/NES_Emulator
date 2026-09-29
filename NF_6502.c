@@ -101,6 +101,7 @@ struct Processor* NF_6502_initProcessor() {
 	newcpu->SP = 0xfd;
 	newcpu->P = 0b00100100;
 	newcpu->cycles = 0;
+	newcpu->cycle_count = 7;		// Resetting takes 7 cycles
 	newcpu->page_crossed = false;
 	newcpu->nmi_pending = false;
 	return newcpu;
@@ -280,7 +281,11 @@ void NF_executeInstruction(struct Processor* CPU) {
 		NF_6502_setFlag(CPU, FLAG_Z, (tmp & 0x00FF) == 0x00);
 		NF_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
 		if (CPU->addr_mode == AM_ACC || CPU->addr_mode == AM_IMP) { CPU->A = tmp & 0x00FF; }
-		else { NF_writeMemory(CPU->bus, CPU->fetched_address, tmp & 0x00FF); }
+		else {
+			// Read-modify-write instructions write the unmodified value back first, then the result on the next cycle
+			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp & 0x00FF);
+		}
 		break;
 	case OP_BCC:
 		if (NF_6502_getFlag(CPU, FLAG_C) == 0) {
@@ -408,6 +413,7 @@ void NF_executeInstruction(struct Processor* CPU) {
 		break;
 	case OP_DEC:
 		tmp8 = CPU->fetched - 1;
+		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
 		NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
 		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
 		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
@@ -430,6 +436,7 @@ void NF_executeInstruction(struct Processor* CPU) {
 		break;
 	case OP_INC:
 		tmp8 = CPU->fetched + 1;
+		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
 		NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
 		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
 		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
@@ -477,12 +484,15 @@ void NF_executeInstruction(struct Processor* CPU) {
 		NF_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
 		break;
 	case OP_LSR:
+		tmp8 = CPU->fetched >> 1;
 		NF_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b00000001));
-		CPU->fetched = CPU->fetched >> 1;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->fetched == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->fetched & 0b10000000));
-		if (CPU->addr_mode == AM_ACC) { CPU->A = CPU->fetched; }
-		else { NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched); }
+		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
+		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
+		if (CPU->addr_mode == AM_ACC) { CPU->A = tmp8; }
+		else {
+			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+		}
 		break;
 	case OP_NOP:
 		// Note: There are a handful of unofficial NOP opcodes, and some of them take two clock cycles instead of one
@@ -529,7 +539,10 @@ void NF_executeInstruction(struct Processor* CPU) {
 		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
 		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		if (CPU->addr_mode == AM_ACC) { CPU->A = tmp8; }
-		else { NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8); }
+		else {
+			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+		}
 		break;
 	case OP_ROR:
 		tmp8 = (NF_6502_getFlag(CPU, FLAG_C) << 7) | (CPU->fetched >> 1);
@@ -537,7 +550,10 @@ void NF_executeInstruction(struct Processor* CPU) {
 		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
 		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		if (CPU->addr_mode == AM_ACC) { CPU->A = tmp8; }
-		else { NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8); }
+		else {
+			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+		}
 		break;
 	case OP_RTI:
 		// "Two instructions (PLP and RTI) pull a byte from the stack and set all the flags. They ignore bits 5 and 4." - wiki.nesdev.com
@@ -696,6 +712,12 @@ void NF_6502_tickClock(struct Processor* CPU) {
 		total_cycles += CPU->cycles;
 	}
 
+	// Handle the IRQ line between instructions, unless interrupts are disabled by the I flag
+	else if (CPU->cycles == 0 && NF_6502_getFlag(CPU, FLAG_I) == 0 && NF_isIRQAsserted(CPU->bus)) {
+		NF_6502_irq(CPU);
+		total_cycles += CPU->cycles;
+	}
+
 	else if (CPU->cycles == 0) {
 		// Fetch the opcode and prepare to execute the next instruction
 		CPU->last_pc = CPU->PC;
@@ -721,4 +743,5 @@ void NF_6502_tickClock(struct Processor* CPU) {
 
 	// Decrement the CPU's cycle count for multi-cycle instructions
 	if (CPU->cycles > 0) { CPU->cycles--; }
+	CPU->cycle_count++;
 }
