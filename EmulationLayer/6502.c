@@ -1,7 +1,7 @@
-#include "NF_6502.h"
-#include "NF_Bus.h"
-#include "NF_PPU.h"
-#include "NF_Debugger.h"
+#include "6502.h"
+#include "Bus.h"
+#include "PPU.h"
+#include "Debugger.h"
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -86,7 +86,7 @@ uint8_t cyclesArray[256] =
 
 
 // Initialize the CPU-> This must be called once before trying to use it
-struct Processor* NF_6502_initProcessor() {
+struct Processor* NES_6502_initProcessor() {
 
 	// If debugging is enabled, open a file for logging
 	if (DEBUG_ENABLED) { myLog = fopen("log.txt", "w"); }
@@ -98,14 +98,14 @@ struct Processor* NF_6502_initProcessor() {
 	}
 
 	newcpu->bus = NULL;
-	NF_6502_resetState(newcpu);
+	NES_6502_resetState(newcpu);
 	return newcpu;
 
 }
 
-// Put the CPU back into its power-on state. Unlike NF_6502_reset (the reset signal), this clears every register.
+// Put the CPU back into its power-on state. Unlike NES_6502_reset (the reset signal), this clears every register.
 // The bus pointer is kept
-void NF_6502_resetState(struct Processor* CPU) {
+void NES_6502_resetState(struct Processor* CPU) {
 	CPU->PC = 0x00;
 	CPU->A = 0x00;
 	CPU->X = 0x00;
@@ -120,23 +120,23 @@ void NF_6502_resetState(struct Processor* CPU) {
 }
 
 // Set one of the processor flags to either 0 or 1. Function exists as a convenience.
-void NF_6502_setFlag(struct Processor* CPU, FLAG_6502 flag, bool value) {
+void NES_6502_setFlag(struct Processor* CPU, FLAG_6502 flag, bool value) {
 	if (value) { CPU->P |= flag; }
 	else { CPU->P &= ~flag; }
 }
 
 // Get one of the processor flags. Function exists as a convenience.
-uint8_t NF_6502_getFlag(struct Processor* CPU, FLAG_6502 flag) {
+uint8_t NES_6502_getFlag(struct Processor* CPU, FLAG_6502 flag) {
 	return (CPU->P & flag);
 }
 
 // Read the value at CPU->fetched_address. Store instructions never actually read their target, so for them this is
 // side-effect free: otherwise e.g. STA $2007 would perform a PPUDATA read and advance the PPU's VRAM address twice.
-static uint8_t NF_readOperand(struct Processor* CPU) {
+static uint8_t NES_readOperand(struct Processor* CPU) {
 	if (CPU->opcode == OP_STA || CPU->opcode == OP_STX || CPU->opcode == OP_STY) {
-		return NF_peekMemory(CPU->bus, CPU->fetched_address);
+		return NES_peekMemory(CPU->bus, CPU->fetched_address);
 	}
-	return NF_readMemory(CPU->bus, CPU->fetched_address);
+	return NES_readMemory(CPU->bus, CPU->fetched_address);
 }
 
 // Each opcode instruction is between 1 and 3 bytes. The first byte tells what the instruction is.
@@ -144,7 +144,7 @@ static uint8_t NF_readOperand(struct Processor* CPU) {
 // What this data is, and where it is located will depend on the instruction. It could either be a literal,
 // stored in the accumulator, or be located at a memory address. But it will always be a uint8_t. It
 // will then be stored at CPU->fetched, and can be used during the execution of the opcode.
-void NF_fetchData(struct Processor* CPU) {
+void NES_fetchData(struct Processor* CPU) {
 	uint16_t tmp = 0x00;
 	uint8_t tmp8 = 0x00;
 	uint16_t lo = 0x00;
@@ -154,11 +154,11 @@ void NF_fetchData(struct Processor* CPU) {
 		CPU->fetched = CPU->A;
 		break;
 	case AM_IMM:
-		CPU->fetched = NF_readMemory(CPU->bus, CPU->PC);
+		CPU->fetched = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
 		break;
 	case AM_REL:
-		CPU->fetched = NF_readMemory(CPU->bus, CPU->PC);
+		CPU->fetched = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
 		if (CPU->fetched & 0x80) {
 			tmp8 = ~CPU->fetched + 1;
@@ -170,74 +170,74 @@ void NF_fetchData(struct Processor* CPU) {
 		CPU->fetched = CPU->A;
 		break;
 	case AM_ZPG:
-		CPU->fetched_address = 0x00FF & NF_readMemory(CPU->bus, CPU->PC);
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched_address = 0x00FF & NES_readMemory(CPU->bus, CPU->PC);
+		CPU->fetched = NES_readOperand(CPU);
 		CPU->PC++;
 		break;
 	case AM_ZPX:
-		CPU->fetched_address = 0x00FF & (NF_readMemory(CPU->bus, CPU->PC) + CPU->X);
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched_address = 0x00FF & (NES_readMemory(CPU->bus, CPU->PC) + CPU->X);
+		CPU->fetched = NES_readOperand(CPU);
 		CPU->PC++;
 		break;
 	case AM_ZPY:
-		CPU->fetched_address = 0x00FF & (NF_readMemory(CPU->bus, CPU->PC) + CPU->Y);
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched_address = 0x00FF & (NES_readMemory(CPU->bus, CPU->PC) + CPU->Y);
+		CPU->fetched = NES_readOperand(CPU);
 		CPU->PC++;
 		break;
 	case AM_ABS:
-		lo = NF_readMemory(CPU->bus, CPU->PC);
+		lo = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
-		hi = NF_readMemory(CPU->bus, CPU->PC);
+		hi = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
 		CPU->fetched_address = (hi << 8) | lo;
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched = NES_readOperand(CPU);
 		break;
 	case AM_ABX:
-		lo = NF_readMemory(CPU->bus, CPU->PC);
+		lo = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
-		hi = NF_readMemory(CPU->bus, CPU->PC);
+		hi = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
 		CPU->fetched_address = ((hi << 8) | lo) + CPU->X;
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched = NES_readOperand(CPU);
 		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_ABY:
-		lo = NF_readMemory(CPU->bus, CPU->PC);
+		lo = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
-		hi = NF_readMemory(CPU->bus, CPU->PC);
+		hi = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
 		CPU->fetched_address = ((hi << 8) | lo) + CPU->Y;
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched = NES_readOperand(CPU);
 		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_IND:
-		lo = NF_readMemory(CPU->bus, CPU->PC);
+		lo = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
-		hi = NF_readMemory(CPU->bus, CPU->PC);
+		hi = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->PC++;
 		tmp = (hi << 8) | lo;
 		// The 6502 has a bug where if the hi byte crosses a page boundary above the lo byte, instead the hi
 		// byte will be pulled from 00 of the same page. It wraps around to it.
-		if (lo == 0x00FF) { CPU->fetched_address = ((NF_readMemory(CPU->bus, tmp & 0xFF00) << 8) | NF_readMemory(CPU->bus, tmp)); }
-		else { CPU->fetched_address = ((NF_readMemory(CPU->bus, tmp + 1) << 8) | NF_readMemory(CPU->bus, tmp)); }
-		CPU->fetched = NF_readOperand(CPU);
+		if (lo == 0x00FF) { CPU->fetched_address = ((NES_readMemory(CPU->bus, tmp & 0xFF00) << 8) | NES_readMemory(CPU->bus, tmp)); }
+		else { CPU->fetched_address = ((NES_readMemory(CPU->bus, tmp + 1) << 8) | NES_readMemory(CPU->bus, tmp)); }
+		CPU->fetched = NES_readOperand(CPU);
 		break;
 	case AM_INX:
-		tmp = NF_readMemory(CPU->bus, CPU->PC) + CPU->X;
+		tmp = NES_readMemory(CPU->bus, CPU->PC) + CPU->X;
 		CPU->PC++;
-		lo = NF_readMemory(CPU->bus, tmp & 0x00FF);
-		hi = NF_readMemory(CPU->bus, (tmp + 1) & 0x00FF);
+		lo = NES_readMemory(CPU->bus, tmp & 0x00FF);
+		hi = NES_readMemory(CPU->bus, (tmp + 1) & 0x00FF);
 		CPU->fetched_address = (hi << 8) | lo;
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched = NES_readOperand(CPU);
 		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_INY:
-		tmp = (0x00FF & NF_readMemory(CPU->bus, CPU->PC));
+		tmp = (0x00FF & NES_readMemory(CPU->bus, CPU->PC));
 		CPU->PC++;
-		lo = NF_readMemory(CPU->bus, tmp & 0x00FF);
-		hi = NF_readMemory(CPU->bus, (tmp + 1) & 0x00FF);
+		lo = NES_readMemory(CPU->bus, tmp & 0x00FF);
+		hi = NES_readMemory(CPU->bus, (tmp + 1) & 0x00FF);
 		CPU->fetched_address = ((hi << 8) | lo) + CPU->Y;
-		CPU->fetched = NF_readOperand(CPU);
+		CPU->fetched = NES_readOperand(CPU);
 		if ((CPU->fetched_address & 0xFF00) != (hi << 8)) { CPU->page_crossed = true; }
 		break;
 	case AM_XXX:
@@ -259,7 +259,7 @@ void NF_fetchData(struct Processor* CPU) {
 	}
 }
 
-void NF_executeInstruction(struct Processor* CPU) {
+void NES_executeInstruction(struct Processor* CPU) {
 
 	uint16_t lo = 0x00;
 	uint16_t hi = 0x00;
@@ -270,43 +270,43 @@ void NF_executeInstruction(struct Processor* CPU) {
 	case OP_ADC:
 		// Formula: A = A + Memory + Carry
 		if (CPU->page_crossed) { CPU->cycles++; }
-		tmp = (uint16_t)CPU->A + (uint16_t)CPU->fetched + (uint16_t)NF_6502_getFlag(CPU, FLAG_C);
-		NF_6502_setFlag(CPU, FLAG_C, (tmp > 0xFF));
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp & 0b0000000011111111) == 0x00);
-		NF_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
+		tmp = (uint16_t)CPU->A + (uint16_t)CPU->fetched + (uint16_t)NES_6502_getFlag(CPU, FLAG_C);
+		NES_6502_setFlag(CPU, FLAG_C, (tmp > 0xFF));
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp & 0b0000000011111111) == 0x00);
+		NES_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
 		// This next line is absolutely hideous, but it makes sense if you work it out on a truth-table
 		// Big thanks to javidx9 for publishing a proof and explanation of this derivation on his GitHub/YouTube :)
 		partial = (~((uint16_t)CPU->A ^ (uint16_t)CPU->fetched) & ((uint16_t)CPU->A ^ (uint16_t)tmp)) & 0x0080;
-		NF_6502_setFlag(CPU, FLAG_V, partial);
+		NES_6502_setFlag(CPU, FLAG_V, partial);
 		CPU->A = tmp & 0x00FF;
 		break;
 	case OP_AND:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		CPU->A = CPU->A & CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_ASL:
 		tmp = CPU->fetched << 1;
-		NF_6502_setFlag(CPU, FLAG_C, (tmp & 0xFF00) > 0);
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp & 0x00FF) == 0x00);
-		NF_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_C, (tmp & 0xFF00) > 0);
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp & 0x00FF) == 0x00);
+		NES_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
 		if (CPU->addr_mode == AM_ACC || CPU->addr_mode == AM_IMP) { CPU->A = tmp & 0x00FF; }
 		else {
 			// Read-modify-write instructions write the unmodified value back first, then the result on the next cycle
-			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
-			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp & 0x00FF);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, tmp & 0x00FF);
 		}
 		break;
 	case OP_BCC:
-		if (NF_6502_getFlag(CPU, FLAG_C) == 0) {
+		if (NES_6502_getFlag(CPU, FLAG_C) == 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
 		}
 		break;
 	case OP_BCS:
-		if (NF_6502_getFlag(CPU, FLAG_C) != 0) { 
+		if (NES_6502_getFlag(CPU, FLAG_C) != 0) { 
 			uint16_t oldPC = CPU->PC; 
 			CPU->PC = CPU->fetched_address;
 			CPU->cycles++;
@@ -315,7 +315,7 @@ void NF_executeInstruction(struct Processor* CPU) {
 		break;
 
 	case OP_BEQ:
-		if (NF_6502_getFlag(CPU, FLAG_Z) != 0) {
+		if (NES_6502_getFlag(CPU, FLAG_Z) != 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
@@ -323,26 +323,26 @@ void NF_executeInstruction(struct Processor* CPU) {
 		break;
 	case OP_BIT:
 		tmp = CPU->A & CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, ((tmp & 0b0000000011111111) == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, CPU->fetched & 0b10000000);
-		NF_6502_setFlag(CPU, FLAG_V, CPU->fetched & 0b01000000);
+		NES_6502_setFlag(CPU, FLAG_Z, ((tmp & 0b0000000011111111) == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, CPU->fetched & 0b10000000);
+		NES_6502_setFlag(CPU, FLAG_V, CPU->fetched & 0b01000000);
 		break;
 	case OP_BMI:
-		if (NF_6502_getFlag(CPU, FLAG_N) != 0) {
+		if (NES_6502_getFlag(CPU, FLAG_N) != 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
 		}
 		break;
 	case OP_BNE:
-		if (NF_6502_getFlag(CPU, FLAG_Z) == 0) {
+		if (NES_6502_getFlag(CPU, FLAG_Z) == 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
 		}
 		break;
 	case OP_BPL:
-		if (NF_6502_getFlag(CPU, FLAG_N) == 0) {
+		if (NES_6502_getFlag(CPU, FLAG_N) == 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
@@ -359,109 +359,109 @@ void NF_executeInstruction(struct Processor* CPU) {
 		CPU->PC++;								// The byte following the BRK instruction is a padding byte that we must skip over
 		// Push the program counter to the stack
 		hi = (CPU->PC >> 8) & 0x00FF;
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, hi & 0x00FF);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, hi & 0x00FF);
 		CPU->SP--;
 		lo = CPU->PC & 0x00FF;
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, lo & 0x00FF);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, lo & 0x00FF);
 		CPU->SP--;
 		// Set break and unused flags
-		NF_6502_setFlag(CPU, FLAG_B, 1);
-		NF_6502_setFlag(CPU, FLAG_U, 1);
+		NES_6502_setFlag(CPU, FLAG_B, 1);
+		NES_6502_setFlag(CPU, FLAG_U, 1);
 		// Push the status register to the flag
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->P);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->P);
 		CPU->SP--;
 		// Unset the flags
-		NF_6502_setFlag(CPU, FLAG_B, 0);
-		NF_6502_setFlag(CPU, FLAG_U, 0);
-		NF_6502_setFlag(CPU, FLAG_I, 1);		// wiki.nesdev.com says that a side effect is that the I flag is set to 1 (after P is pushed).
+		NES_6502_setFlag(CPU, FLAG_B, 0);
+		NES_6502_setFlag(CPU, FLAG_U, 0);
+		NES_6502_setFlag(CPU, FLAG_I, 1);		// wiki.nesdev.com says that a side effect is that the I flag is set to 1 (after P is pushed).
 		// Set the program counter to the address stored at the IRQ vector
-		lo = NF_readMemory(CPU->bus, NF_6502_IRQ_VECTOR);
-		hi = NF_readMemory(CPU->bus, NF_6502_IRQ_VECTOR + 1);
+		lo = NES_readMemory(CPU->bus, NES_6502_IRQ_VECTOR);
+		hi = NES_readMemory(CPU->bus, NES_6502_IRQ_VECTOR + 1);
 		CPU->PC = (hi << 8) | lo;
 		break;
 	case OP_BVC:
-		if (NF_6502_getFlag(CPU, FLAG_V) == 0) {
+		if (NES_6502_getFlag(CPU, FLAG_V) == 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
 		}
 		break;
 	case OP_BVS:
-		if (NF_6502_getFlag(CPU, FLAG_V) != 0) {
+		if (NES_6502_getFlag(CPU, FLAG_V) != 0) {
 			CPU->cycles++;
 			if (CPU->page_crossed) { CPU->cycles++; }
 			CPU->PC = CPU->fetched_address;
 		}
 		break;
 	case OP_CLC:
-		NF_6502_setFlag(CPU, FLAG_C, 0);
+		NES_6502_setFlag(CPU, FLAG_C, 0);
 		break;
 	case OP_CLD:
-		NF_6502_setFlag(CPU, FLAG_D, 0);
+		NES_6502_setFlag(CPU, FLAG_D, 0);
 		break;
 	case OP_CLI:
-		NF_6502_setFlag(CPU, FLAG_I, 0);
+		NES_6502_setFlag(CPU, FLAG_I, 0);
 		break;
 	case OP_CLV:
-		NF_6502_setFlag(CPU, FLAG_V, 0);
+		NES_6502_setFlag(CPU, FLAG_V, 0);
 		break;
 	case OP_CMP:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		tmp = (uint16_t)CPU->A - (uint16_t)CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_C, (CPU->A >= CPU->fetched));
-		NF_6502_setFlag(CPU, FLAG_Z, ((tmp & 0x00FF) == 0));
-		NF_6502_setFlag(CPU, FLAG_N, (tmp & 0x0080));
+		NES_6502_setFlag(CPU, FLAG_C, (CPU->A >= CPU->fetched));
+		NES_6502_setFlag(CPU, FLAG_Z, ((tmp & 0x00FF) == 0));
+		NES_6502_setFlag(CPU, FLAG_N, (tmp & 0x0080));
 		break;
 	case OP_CPX:
-		NF_6502_setFlag(CPU, FLAG_C, (CPU->X >= CPU->fetched));
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == CPU->fetched));
-		NF_6502_setFlag(CPU, FLAG_N, ((CPU->X - CPU->fetched) & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_C, (CPU->X >= CPU->fetched));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->X == CPU->fetched));
+		NES_6502_setFlag(CPU, FLAG_N, ((CPU->X - CPU->fetched) & 0b10000000));
 		break;
 	case OP_CPY:
-		NF_6502_setFlag(CPU, FLAG_C, (CPU->Y >= CPU->fetched));
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->Y == CPU->fetched));
-		NF_6502_setFlag(CPU, FLAG_N, ((CPU->Y - CPU->fetched) & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_C, (CPU->Y >= CPU->fetched));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->Y == CPU->fetched));
+		NES_6502_setFlag(CPU, FLAG_N, ((CPU->Y - CPU->fetched) & 0b10000000));
 		break;
 	case OP_DEC:
 		tmp8 = CPU->fetched - 1;
-		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
-		NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
+		NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+		NES_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		break;
 	case OP_DEX:
 		CPU->X--;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		break;
 	case OP_DEY:
 		CPU->Y--;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
 		break;
 	case OP_EOR:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		CPU->A ^= CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_INC:
 		tmp8 = CPU->fetched + 1;
-		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
-		NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
+		NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+		NES_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		break;
 	case OP_INX:
 		CPU->X++;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		break;
 	case OP_INY:
 		CPU->Y++;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
 		break;
 	case OP_JMP:
 		CPU->PC = CPU->fetched_address;
@@ -469,40 +469,40 @@ void NF_executeInstruction(struct Processor* CPU) {
 	case OP_JSR:
 		CPU->PC--;
 		hi = (CPU->PC >> 8) & 0x00FF;
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, hi & 0x00FF);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, hi & 0x00FF);
 		CPU->SP--;
 		lo = CPU->PC & 0x00FF;
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, lo & 0x00FF);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, lo & 0x00FF);
 		CPU->SP--;
 		CPU->PC = CPU->fetched_address;
 		break;
 	case OP_LDA:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		CPU->A = CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_LDX:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		CPU->X = CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		break;
 	case OP_LDY:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		CPU->Y = CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
 		break;
 	case OP_LSR:
 		tmp8 = CPU->fetched >> 1;
-		NF_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b00000001));
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b00000001));
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		if (CPU->addr_mode == AM_ACC) { CPU->A = tmp8; }
 		else {
-			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
-			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
 		}
 		break;
 	case OP_NOP:
@@ -512,21 +512,21 @@ void NF_executeInstruction(struct Processor* CPU) {
 	case OP_ORA:
 		if (CPU->page_crossed) { CPU->cycles++; }
 		CPU->A |= CPU->fetched;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_PHA:
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->A);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->A);
 		CPU->SP--;
 		break;
 	case OP_PHP:
 		// Bits 4 and 5 will always be set when pushing the P register to the stack
-		NF_6502_setFlag(CPU, FLAG_B, 1);
-		NF_6502_setFlag(CPU, FLAG_U, 1);
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->P);
+		NES_6502_setFlag(CPU, FLAG_B, 1);
+		NES_6502_setFlag(CPU, FLAG_U, 1);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->P);
 		CPU->SP--;
-		NF_6502_setFlag(CPU, FLAG_B, 0);
-		NF_6502_setFlag(CPU, FLAG_U, 1);
+		NES_6502_setFlag(CPU, FLAG_B, 0);
+		NES_6502_setFlag(CPU, FLAG_U, 1);
 		break;
 	case OP_PLA:
 		CPU->SP++;
@@ -534,55 +534,55 @@ void NF_executeInstruction(struct Processor* CPU) {
 		// exist on the physical register at all. Setting them to true here allows the emulator to pass the nestest.nes test barrage,
 		// which is good: because an actual NES passes all of the tests. So it would seem that this matches the behavior of the NES,
 		// regardless of what the specifications say...
-		CPU->A = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP);
-		NF_6502_setFlag(CPU, FLAG_U, 1); // For nestest.nes
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		CPU->A = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP);
+		NES_6502_setFlag(CPU, FLAG_U, 1); // For nestest.nes
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_PLP:
 		// "Two instructions (PLP and RTI) pull a byte from the stack and set all the flags. They ignore bits 5 and 4." - wiki.nesdev.com
 		CPU->SP++;
-		CPU->P = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP) & 0b11001111 | FLAG_U; // Same deal: setting this flag is programming the emulator against the nestest test cases.
+		CPU->P = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP) & 0b11001111 | FLAG_U; // Same deal: setting this flag is programming the emulator against the nestest test cases.
 		break;
 	case OP_ROL:
-		tmp8 = CPU->fetched << 1 | NF_6502_getFlag(CPU, FLAG_C) ;
-		NF_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b10000000));
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
+		tmp8 = CPU->fetched << 1 | NES_6502_getFlag(CPU, FLAG_C) ;
+		NES_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		if (CPU->addr_mode == AM_ACC) { CPU->A = tmp8; }
 		else {
-			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
-			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
 		}
 		break;
 	case OP_ROR:
-		tmp8 = (NF_6502_getFlag(CPU, FLAG_C) << 7) | (CPU->fetched >> 1);
-		NF_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b00000001));
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
+		tmp8 = (NES_6502_getFlag(CPU, FLAG_C) << 7) | (CPU->fetched >> 1);
+		NES_6502_setFlag(CPU, FLAG_C, (CPU->fetched & 0b00000001));
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp8 == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (tmp8 & 0b10000000));
 		if (CPU->addr_mode == AM_ACC) { CPU->A = tmp8; }
 		else {
-			NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
-			NF_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->fetched);
+			NES_writeMemory(CPU->bus, CPU->fetched_address, tmp8);
 		}
 		break;
 	case OP_RTI:
 		// "Two instructions (PLP and RTI) pull a byte from the stack and set all the flags. They ignore bits 5 and 4." - wiki.nesdev.com
 		CPU->SP++;
-		CPU->P = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP);
-		NF_6502_setFlag(CPU, FLAG_U, 1); // For nestest.nes
-		NF_6502_setFlag(CPU, FLAG_B, 0); // For nestest.nes
+		CPU->P = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP);
+		NES_6502_setFlag(CPU, FLAG_U, 1); // For nestest.nes
+		NES_6502_setFlag(CPU, FLAG_B, 0); // For nestest.nes
 		CPU->SP++;
-		lo = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP);
+		lo = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP);
 		CPU->SP++;
-		hi = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP);
+		hi = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP);
 		CPU->PC = (hi << 8) | lo;
 		break;
 	case OP_RTS:
 		CPU->SP++;
-		lo = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP);
+		lo = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP);
 		CPU->SP++;
-		hi = NF_readMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP);
+		hi = NES_readMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP);
 		CPU->PC = (hi << 8) | lo;
 		CPU->PC++;
 		break;
@@ -591,58 +591,58 @@ void NF_executeInstruction(struct Processor* CPU) {
 		// Formula is equivalent to: A + ~Memory + Carry
 		// This makes it very similar to the code used for ADC
 		if (CPU->page_crossed) { CPU->cycles++; }
-		tmp = CPU->A + (CPU->fetched ^ 0x00FF) + NF_6502_getFlag(CPU, FLAG_C);
-		NF_6502_setFlag(CPU, FLAG_C, (tmp > 0xFF));
-		NF_6502_setFlag(CPU, FLAG_Z, (tmp & 0x00FF) == 0x00);
-		NF_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
-		NF_6502_setFlag(CPU, FLAG_V, (tmp ^ CPU->A) & (tmp ^ (CPU->fetched ^ 0x00FF)) & 0x0080); // Take a deep breath...
+		tmp = CPU->A + (CPU->fetched ^ 0x00FF) + NES_6502_getFlag(CPU, FLAG_C);
+		NES_6502_setFlag(CPU, FLAG_C, (tmp > 0xFF));
+		NES_6502_setFlag(CPU, FLAG_Z, (tmp & 0x00FF) == 0x00);
+		NES_6502_setFlag(CPU, FLAG_N, (tmp & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_V, (tmp ^ CPU->A) & (tmp ^ (CPU->fetched ^ 0x00FF)) & 0x0080); // Take a deep breath...
 		CPU->A = tmp & 0x00FF;
 		break;
 	case OP_SEC:
-		NF_6502_setFlag(CPU, FLAG_C, 1);
+		NES_6502_setFlag(CPU, FLAG_C, 1);
 		break;
 	case OP_SED:
-		NF_6502_setFlag(CPU, FLAG_D, 1);
+		NES_6502_setFlag(CPU, FLAG_D, 1);
 		break;
 	case OP_SEI:
-		NF_6502_setFlag(CPU, FLAG_I, 1);
+		NES_6502_setFlag(CPU, FLAG_I, 1);
 		break;
 	case OP_STA:
-		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->A);
+		NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->A);
 		break;
 	case OP_STX:
-		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->X);
+		NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->X);
 		break;
 	case OP_STY:
-		NF_writeMemory(CPU->bus, CPU->fetched_address, CPU->Y);
+		NES_writeMemory(CPU->bus, CPU->fetched_address, CPU->Y);
 		break;
 	case OP_TAX:
 		CPU->X = CPU->A;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		break;
 	case OP_TAY:
 		CPU->Y = CPU->A;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->Y == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->Y & 0b10000000));
 		break;
 	case OP_TSX:
 		CPU->X = CPU->SP;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->X == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->X & 0b10000000));
 		break;
 	case OP_TXA:
 		CPU->A = CPU->X;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_TXS:
 		CPU->SP = CPU->X;
 		break;
 	case OP_TYA:
 		CPU->A = CPU->Y;
-		NF_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
-		NF_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
+		NES_6502_setFlag(CPU, FLAG_Z, (CPU->A == 0x00));
+		NES_6502_setFlag(CPU, FLAG_N, (CPU->A & 0b10000000));
 		break;
 	case OP_XXX:
 	default:
@@ -658,7 +658,7 @@ void NF_executeInstruction(struct Processor* CPU) {
 
 
 // Reset signal handling
-void NF_6502_reset(struct Processor* CPU) {
+void NES_6502_reset(struct Processor* CPU) {
 	// Processors is NOT to be zeroed out on reset
 	// The behavior of the status flags on reset appears to be undefined behavior on the 6502, but on the NES
 	// it appears they go unchanged.
@@ -667,27 +667,27 @@ void NF_6502_reset(struct Processor* CPU) {
 	//CPU->Y = 0xFF;
 	//CPU->SP = 0xFD;
 	CPU->P = 0x00 | FLAG_I;
-	uint16_t lo = NF_readMemory(CPU->bus, NF_6502_RESET_VECTOR);
-	uint16_t hi = NF_readMemory(CPU->bus, NF_6502_RESET_VECTOR + 1);
+	uint16_t lo = NES_readMemory(CPU->bus, NES_6502_RESET_VECTOR);
+	uint16_t hi = NES_readMemory(CPU->bus, NES_6502_RESET_VECTOR + 1);
 	CPU->PC = (hi << 8) | lo;
 	CPU->cycles = 7;
 }
 
 // Maskable interrupt signal handling
-void NF_6502_irq(struct Processor* CPU) {
+void NES_6502_irq(struct Processor* CPU) {
 	// The interrupt will only be handled if they are not disabled
-	if (NF_6502_getFlag(CPU, FLAG_I) == 0) {
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, (CPU->PC >> 8) & 0x00FF);
+	if (NES_6502_getFlag(CPU, FLAG_I) == 0) {
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, (CPU->PC >> 8) & 0x00FF);
 		CPU->SP--;
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->PC & 0x00FF);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->PC & 0x00FF);
 		CPU->SP--;
-		NF_6502_setFlag(CPU, FLAG_B, 0);
-		NF_6502_setFlag(CPU, FLAG_U, 1);
-		NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->P);
+		NES_6502_setFlag(CPU, FLAG_B, 0);
+		NES_6502_setFlag(CPU, FLAG_U, 1);
+		NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->P);
 		CPU->SP--;
-		NF_6502_setFlag(CPU, FLAG_I, 1);
-		uint16_t lo = NF_readMemory(CPU->bus, NF_6502_IRQ_VECTOR);
-		uint16_t hi = NF_readMemory(CPU->bus, NF_6502_IRQ_VECTOR + 1);
+		NES_6502_setFlag(CPU, FLAG_I, 1);
+		uint16_t lo = NES_readMemory(CPU->bus, NES_6502_IRQ_VECTOR);
+		uint16_t hi = NES_readMemory(CPU->bus, NES_6502_IRQ_VECTOR + 1);
 		CPU->PC = (hi << 8) | lo;
 		CPU->cycles = 7;
 	}
@@ -695,36 +695,36 @@ void NF_6502_irq(struct Processor* CPU) {
 
 
 // Non-maskable interrupt signal handling
-void NF_6502_nmi(struct Processor* CPU) {
+void NES_6502_nmi(struct Processor* CPU) {
 	// The same as irq, except this one cannot be ignored because of the I flag
-	NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, (CPU->PC >> 8) & 0x00FF);
+	NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, (CPU->PC >> 8) & 0x00FF);
 	CPU->SP--;
-	NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->PC & 0x00FF);
+	NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->PC & 0x00FF);
 	CPU->SP--;
-	NF_6502_setFlag(CPU, FLAG_B, 0);
-	NF_6502_setFlag(CPU, FLAG_U, 1);
-	NF_writeMemory(CPU->bus, NF_6502_STACK_LOCATION + CPU->SP, CPU->P);
+	NES_6502_setFlag(CPU, FLAG_B, 0);
+	NES_6502_setFlag(CPU, FLAG_U, 1);
+	NES_writeMemory(CPU->bus, NES_6502_STACK_LOCATION + CPU->SP, CPU->P);
 	CPU->SP--;
-	NF_6502_setFlag(CPU, FLAG_I, 1);
-	uint16_t lo = NF_readMemory(CPU->bus, NF_6502_NMI_VECTOR);
-	uint16_t hi = NF_readMemory(CPU->bus, NF_6502_NMI_VECTOR + 1);
+	NES_6502_setFlag(CPU, FLAG_I, 1);
+	uint16_t lo = NES_readMemory(CPU->bus, NES_6502_NMI_VECTOR);
+	uint16_t hi = NES_readMemory(CPU->bus, NES_6502_NMI_VECTOR + 1);
 	CPU->PC = (hi << 8) | lo;
 	CPU->cycles = 7;
 }
 
 
-void NF_6502_tickClock(struct Processor* CPU) {
+void NES_6502_tickClock(struct Processor* CPU) {
 
-	// Service a pending NMI between instructions (NF_6502_nmi sets up the 7 cycles the interrupt takes)
+	// Service a pending NMI between instructions (NES_6502_nmi sets up the 7 cycles the interrupt takes)
 	if (CPU->cycles == 0 && CPU->nmi_pending) {
 		CPU->nmi_pending = false;
-		NF_6502_nmi(CPU);
+		NES_6502_nmi(CPU);
 		total_cycles += CPU->cycles;
 	}
 
 	// Handle the IRQ line between instructions, unless interrupts are disabled by the I flag
-	else if (CPU->cycles == 0 && NF_6502_getFlag(CPU, FLAG_I) == 0 && NF_isIRQAsserted(CPU->bus)) {
-		NF_6502_irq(CPU);
+	else if (CPU->cycles == 0 && NES_6502_getFlag(CPU, FLAG_I) == 0 && NES_isIRQAsserted(CPU->bus)) {
+		NES_6502_irq(CPU);
 		total_cycles += CPU->cycles;
 	}
 
@@ -732,18 +732,18 @@ void NF_6502_tickClock(struct Processor* CPU) {
 		// Fetch the opcode and prepare to execute the next instruction
 		CPU->last_pc = CPU->PC;
 		CPU->page_crossed = false;
-		uint8_t fetchedOpcode = NF_readMemory(CPU->bus, CPU->PC);
+		uint8_t fetchedOpcode = NES_readMemory(CPU->bus, CPU->PC);
 		CPU->opcode = charToOpcodeArray[fetchedOpcode];
 		CPU->addr_mode = charToAddressModeArray[fetchedOpcode];
 		CPU->PC++;
 
-		NF_fetchData(CPU);
+		NES_fetchData(CPU);
 
 		if (DEBUG_ENABLED && myLog != NULL) { printToDebugFile(myLog, CPU); }
 
 		// Get the number of cycles for the fetched opcode and execute it
 		CPU->cycles = cyclesArray[fetchedOpcode];
-		NF_executeInstruction(CPU);
+		NES_executeInstruction(CPU);
 
 		if (DEBUG_ENABLED && myLog != NULL) { fprintf(myLog, "%d\n", total_cycles); }
 

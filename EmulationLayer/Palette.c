@@ -1,4 +1,4 @@
-#include "NF_Palette.h"
+#include "Palette.h"
 
 const uint8_t NES_Palette[64][3] = {
 	{84, 84, 84},		// 0x00
@@ -67,7 +67,7 @@ const uint8_t NES_Palette[64][3] = {
 	{0, 0, 0}			// 0x3F (Unused)
 };
 
-const uint8_t* NF_getNESColor(uint8_t index) {
+const uint8_t* NES_getNESColor(uint8_t index) {
 	if (index <= 0x3F) { return NES_Palette[index]; }
 	printf("Error: A color index outside of the NES Color Palette range was requested.\n");
 	return NES_Palette[0x3F];

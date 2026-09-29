@@ -1,7 +1,7 @@
 #ifndef MAPPER_H
 #define MAPPER_H
 
-#include "../NF_Cartridge.h"
+#include "../EmulationLayer/Cartridge.h"
 
 #include "Mapper_0.h"
 #include "Mapper_1.h"

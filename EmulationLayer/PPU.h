@@ -1,6 +1,6 @@
-#ifndef NF_H_PPU
-#define NF_H_PPU
-#include "NF_Bus.h"
+#ifndef NES_H_PPU
+#define NES_H_PPU
+#include "Bus.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -46,7 +46,7 @@ typedef enum {
 #define PPU_MAX_SPRITES_PER_SCANLINE 8
 
 // One sprite entry, laid out the same as its 4 bytes in OAM (see the OAMDATA comment below for details)
-struct NF_SpriteEntry {
+struct NES_SpriteEntry {
 	uint8_t y;       // Y position of the top of the sprite, minus 1
 	uint8_t id;      // Tile index
 	uint8_t attr;    // Palette, priority, and flip bits
@@ -173,7 +173,7 @@ struct PictureProcessingUnit {
 
 	// Sprite rendering: the (up to 8) sprites selected from OAM for the scanline being drawn ("secondary OAM").
 	// The x field of each entry is counted down as the scanline is drawn, and the sprite starts shifting out once it reaches 0
-	struct NF_SpriteEntry sprite_scanline[PPU_MAX_SPRITES_PER_SCANLINE];
+	struct NES_SpriteEntry sprite_scanline[PPU_MAX_SPRITES_PER_SCANLINE];
 	uint8_t sprite_count;
 	uint8_t sprite_shifter_pattern_lo[PPU_MAX_SPRITES_PER_SCANLINE];
 	uint8_t sprite_shifter_pattern_hi[PPU_MAX_SPRITES_PER_SCANLINE];
@@ -181,14 +181,14 @@ struct PictureProcessingUnit {
 	bool sprite_zero_being_drawn;   // Sprite 0 supplied the sprite pixel currently being output
 };
 
-uint8_t NF_PPU_readRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg);
-void NF_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, uint8_t data);
-struct PictureProcessingUnit* NF_initPPU();
-void NF_PPU_tickClock(struct PictureProcessingUnit* ppu);
-void NF_PPU_resetState(struct PictureProcessingUnit* ppu);
+uint8_t NES_PPU_readRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg);
+void NES_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, uint8_t data);
+struct PictureProcessingUnit* NES_initPPU();
+void NES_PPU_tickClock(struct PictureProcessingUnit* ppu);
+void NES_PPU_resetState(struct PictureProcessingUnit* ppu);
 
 // Copy 256 bytes into OAM starting at OAMADDR (used by the OAM DMA at $4014)
-void NF_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page);
+void NES_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page);
 
 
 #endif

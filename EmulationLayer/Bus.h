@@ -1,8 +1,8 @@
-#ifndef NF_H_BUS
-#define NF_H_BUS
-#include "NF_Cartridge.h"
-#include "NF_Palette.h"
-#include "NF_ControllerPort.h"
+#ifndef NES_H_BUS
+#define NES_H_BUS
+#include "Cartridge.h"
+#include "Palette.h"
+#include "ControllerPort.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -21,11 +21,11 @@
 // $FFFC-FFFD: Reset Vector
 // $FFFE-FFFF: IRQ Vector
 
-#define NF_6502_STACK_LOCATION (uint16_t)0x0100
-#define NF_6502_ROM_LOCATION (uint16_t)0x8000
-#define NF_6502_NMI_VECTOR (uint16_t)0xFFFA
-#define NF_6502_RESET_VECTOR (uint16_t)0xFFFC
-#define NF_6502_IRQ_VECTOR (uint16_t)0xFFFE
+#define NES_6502_STACK_LOCATION (uint16_t)0x0100
+#define NES_6502_ROM_LOCATION (uint16_t)0x8000
+#define NES_6502_NMI_VECTOR (uint16_t)0xFFFA
+#define NES_6502_RESET_VECTOR (uint16_t)0xFFFC
+#define NES_6502_IRQ_VECTOR (uint16_t)0xFFFE
 
 // This structure represents the console itself. It bundles objects making up the physical parts of the
 // console, and acts as a bus, allowing them to communicate with one another
@@ -36,38 +36,38 @@ struct NES_Console {
 	struct PictureProcessingUnit* ConnectedPPU;
 	struct AudioProcessingUnit* ConnectedAPU;
 	struct ControllerPort* ConnectedControllerPort;
-	void (*imageOutFunc)(struct NF_Pixel);
+	void (*imageOutFunc)(struct NES_Pixel);
 	void (*audioOutFunc)(float);
 };
 
 // Must be called once to create the Console object
-struct NES_Console* NF_initConsole();
+struct NES_Console* NES_initConsole();
 
 // Connect a cartridge to the console. This function also places the Program Counter at the Reset vector
-int NF_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
+int NES_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
 
 // Removes a cartridge from the console, and frees the memory associated with it. Also resets thhe state of the console.
-void NF_removeCartridge(struct NES_Console* console);
+void NES_removeCartridge(struct NES_Console* console);
 
 // Send out one clock tick. This will advance both the CPU and the PPU appropriately
-void NF_busTickMasterClock(struct NES_Console* console, bool startup_ready);
+void NES_busTickMasterClock(struct NES_Console* console, bool startup_ready);
 
 // Call the NMI function from the processor (this exists so that the PPU can send a signal to trigger it without being exposed to the CPU directly)
-void NF_emitNMI(struct NES_Console* console);
+void NES_emitNMI(struct NES_Console* console);
 
 // Check whether anything on the bus is holding the CPU's IRQ line low
-bool NF_isIRQAsserted(struct NES_Console* console);
+bool NES_isIRQAsserted(struct NES_Console* console);
 
 // Write to the CPU memory address
-void NF_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value);
+void NES_writeMemory(struct NES_Console* console, uint16_t address, uint8_t value);
 
 // Read from the CPU memory address
-uint8_t NF_readMemory(struct NES_Console* console, uint16_t address);
+uint8_t NES_readMemory(struct NES_Console* console, uint16_t address);
 
 // Read from the CPU memory address without side effects (PPU registers read as 0)
-uint8_t NF_peekMemory(struct NES_Console* console, uint16_t address);
+uint8_t NES_peekMemory(struct NES_Console* console, uint16_t address);
 
 // Reset the console to its initial state
-void NF_resetConsoleState(struct NES_Console* console);
+void NES_resetConsoleState(struct NES_Console* console);
 
 #endif

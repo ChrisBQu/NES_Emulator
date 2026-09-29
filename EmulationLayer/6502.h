@@ -1,9 +1,9 @@
-#ifndef NF_6502_H
-#define NF_6502_H
+#ifndef NES_6502_H
+#define NES_6502_H
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "NF_Bus.h"
+#include "Bus.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -77,13 +77,13 @@ typedef enum {
 	FLAG_N = 0b10000000, // Negative
 } FLAG_6502;
 
-struct Processor * NF_6502_initProcessor();
+struct Processor * NES_6502_initProcessor();
 
-void NF_6502_resetState(struct Processor* CPU);
-void NF_6502_tickClock(struct Processor *CPU);
-void NF_6502_reset(struct Processor* CPU);
-void NF_6502_irq(struct Processor* CPU);
-void NF_6502_nmi(struct Processor* CPU);
-uint8_t NF_6502_getFlag(struct Processor *CPU, FLAG_6502 flag);
+void NES_6502_resetState(struct Processor* CPU);
+void NES_6502_tickClock(struct Processor *CPU);
+void NES_6502_reset(struct Processor* CPU);
+void NES_6502_irq(struct Processor* CPU);
+void NES_6502_nmi(struct Processor* CPU);
+uint8_t NES_6502_getFlag(struct Processor *CPU, FLAG_6502 flag);
 
 #endif

@@ -1,13 +1,13 @@
-#ifndef CF_H_CONTROLLER
-#define CF_H_CONTROLLER
+#ifndef CONTROLLER_H
+#define CONTROLLER_H
 
 #include <SDL.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "Utils/Hashmap.h"
+#include "../Utils/Hashmap.h"
 
-typedef enum { CF_UP, CF_RIGHT, CF_DOWN, CF_LEFT, CF_A, CF_B, CF_SELECT, CF_START, CF_NUMBER_OF_BUTTONS } CF_BUTTON;
+typedef enum { BUTTON_UP, BUTTON_RIGHT, BUTTON_DOWN, BUTTON_LEFT, BUTTON_A, BUTTON_B, BUTTON_SELECT, BUTTON_START, NUMBER_OF_BUTTONS } CONTROLLER_BUTTON;
 
 typedef struct Controller Controller;
 
@@ -16,7 +16,7 @@ void destroy_controller(Controller *controller);
 
 void controller_init_default_bindings(Controller *controller);
 
-void controller_bind_key_to_button(Controller* controller, SDL_Keycode key, CF_BUTTON button);
+void controller_bind_key_to_button(Controller* controller, SDL_Keycode key, CONTROLLER_BUTTON button);
 void controller_bind_stick_to_button(Controller *controller, int from_stick, int from_axis, int from_direction, SDL_GameControllerButton to_button);
 void controller_handle_input(Controller *controller, SDL_Event event);
 

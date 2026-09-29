@@ -1,6 +1,6 @@
-#ifndef NF_H_APU
-#define NF_H_APU
-#include "NF_Bus.h"
+#ifndef NES_H_APU
+#define NES_H_APU
+#include "Bus.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -14,10 +14,10 @@
 // $4015:      Status    (write: enable channels, read: which channels are still playing, frame and DMC IRQ flags)
 // $4017:      Frame counter (write only: 4-step/5-step mode, IRQ inhibit)
 
-#define NF_APU_CPU_CLOCK_RATE 1789773.0
+#define NES_APU_CPU_CLOCK_RATE 1789773.0
 
 // Volume envelope, shared by the pulse and noise channels
-struct NF_APU_Envelope {
+struct NES_APU_Envelope {
 	bool start;           // Set when the channel's 4th register is written; restarts the envelope
 	bool loop;            // Loop the decay (this bit is also the length counter halt flag)
 	bool constant;        // Use a constant volume instead of the decaying one
@@ -26,7 +26,7 @@ struct NF_APU_Envelope {
 	uint8_t decay;        // Decaying volume level, 15 -> 0
 };
 
-struct NF_APU_Pulse {
+struct NES_APU_Pulse {
 	bool is_pulse1;       // Pulse 1's sweep negates slightly differently (ones' complement) from pulse 2's
 	bool enabled;
 	uint8_t duty;         // Which of the 4 duty cycle sequences to use
@@ -34,7 +34,7 @@ struct NF_APU_Pulse {
 	uint16_t timer_period;
 	uint16_t timer;
 	uint8_t length;       // Length counter: the channel is silenced when it reaches 0
-	struct NF_APU_Envelope envelope;
+	struct NES_APU_Envelope envelope;
 
 	bool sweep_enabled;
 	bool sweep_negate;
@@ -44,7 +44,7 @@ struct NF_APU_Pulse {
 	uint8_t sweep_divider;
 };
 
-struct NF_APU_Triangle {
+struct NES_APU_Triangle {
 	bool enabled;
 	bool control;              // Halts the length counter, and stops the linear counter reload flag from clearing
 	bool linear_reload_flag;
@@ -56,18 +56,18 @@ struct NF_APU_Triangle {
 	uint16_t timer;
 };
 
-struct NF_APU_Noise {
+struct NES_APU_Noise {
 	bool enabled;
 	bool mode;                 // Short mode: feedback from bit 6 instead of bit 1, giving a metallic tone
 	uint16_t shift_register;   // 15-bit linear feedback shift register
 	uint16_t timer_period;
 	uint16_t timer;
 	uint8_t length;
-	struct NF_APU_Envelope envelope;
+	struct NES_APU_Envelope envelope;
 };
 
 // Delta modulation channel: plays 1-bit delta-encoded samples read from cartridge memory
-struct NF_APU_DMC {
+struct NES_APU_DMC {
 	bool irq_enabled;          // Set the interrupt flag when a non-looping sample finishes
 	bool loop;                 // Restart the sample when it finishes
 	bool irq;                  // Interrupt flag; nothing raises a CPU IRQ from it yet
@@ -94,11 +94,11 @@ struct NF_APU_DMC {
 struct AudioProcessingUnit {
 	struct NES_Console* bus;
 
-	struct NF_APU_Pulse pulse1;
-	struct NF_APU_Pulse pulse2;
-	struct NF_APU_Triangle triangle;
-	struct NF_APU_Noise noise;
-	struct NF_APU_DMC dmc;
+	struct NES_APU_Pulse pulse1;
+	struct NES_APU_Pulse pulse2;
+	struct NES_APU_Triangle triangle;
+	struct NES_APU_Noise noise;
+	struct NES_APU_DMC dmc;
 
 	// Frame counter: ticks the envelopes, length counters, sweeps and linear counter at ~240Hz
 	bool frame_mode_5step;
@@ -120,22 +120,22 @@ struct AudioProcessingUnit {
 };
 
 // Must be called once to create the APU object
-struct AudioProcessingUnit* NF_initAPU();
+struct AudioProcessingUnit* NES_initAPU();
 
 // Put the APU back into its power-on state. The output sample rate is kept
-void NF_APU_resetState(struct AudioProcessingUnit* apu);
+void NES_APU_resetState(struct AudioProcessingUnit* apu);
 
 // Set the rate of the samples sent to the console's audioOutFunc (e.g. 44100)
-void NF_APU_setSampleRate(struct AudioProcessingUnit* apu, double sample_rate);
+void NES_APU_setSampleRate(struct AudioProcessingUnit* apu, double sample_rate);
 
 // Advance the APU by one CPU cycle
-void NF_APU_tickClock(struct AudioProcessingUnit* apu);
+void NES_APU_tickClock(struct AudioProcessingUnit* apu);
 
 // Write to one of the APU registers ($4000-$4013, $4015, $4017)
-void NF_APU_writeRegister(struct AudioProcessingUnit* apu, uint16_t address, uint8_t data);
+void NES_APU_writeRegister(struct AudioProcessingUnit* apu, uint16_t address, uint8_t data);
 
-// Read the status register ($4015). 
+// Read the status register ($4015).
 // Note: This clears the frame IRQ flag.
-uint8_t NF_APU_readStatus(struct AudioProcessingUnit* apu);
+uint8_t NES_APU_readStatus(struct AudioProcessingUnit* apu);
 
 #endif

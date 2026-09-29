@@ -1,11 +1,11 @@
-#ifndef NF_DEBUGGER_H
-#define NF_DEBUGGER_H
+#ifndef NES_DEBUGGER_H
+#define NES_DEBUGGER_H
 
 #include <stdlib.h>
 
 #define DEBUG_ENABLED 0
 
-#include "NF_6502.h"
+#include "6502.h"
 #include <stdlib.h>
 
 uint8_t getAddressModeToByteCount(ADDRESS_MODE_6502 value);

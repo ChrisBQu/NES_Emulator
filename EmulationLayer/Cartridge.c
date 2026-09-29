@@ -1,7 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "NF_Cartridge.h"
-#include "Mappers/Mapper.h"
+#include "Cartridge.h"
+#include "../Mappers/Mapper.h"
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
@@ -12,7 +12,7 @@
 #define PRG_RAM_SIZE 8192
 
 // Take byte data stored in a character array, and parse the ROM into a Cartridge structure
-struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
+struct Cartridge * NES_createCartridgeFromBuffer(char* rom_data) {
 
 	struct Cartridge *Cart = malloc(sizeof(struct Cartridge));
 
@@ -110,7 +110,7 @@ struct Cartridge * NF_createCartridgeFromBuffer(char* rom_data) {
 }
 
 // Helper function, read contents of ROM file into character array
-uint8_t * NF_readROMtoBuffer(const char* filename) {
+uint8_t * NES_readROMtoBuffer(const char* filename) {
 	FILE* fileptr;
 	char* buffer;
 	long filelen;
@@ -133,7 +133,7 @@ uint8_t * NF_readROMtoBuffer(const char* filename) {
 	return buffer;
 }
 
-uint8_t NF_readCartPRG_ROM(struct Cartridge *c, uint16_t address) {
+uint8_t NES_readCartPRG_ROM(struct Cartridge *c, uint16_t address) {
 
 	if (c == NULL) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to read PRG ROM function.\n");
@@ -149,7 +149,7 @@ uint8_t NF_readCartPRG_ROM(struct Cartridge *c, uint16_t address) {
 	}
 }
 
-void NF_writeCartPRG(struct Cartridge* c, uint16_t address, uint8_t data, uint64_t cpu_cycle) {
+void NES_writeCartPRG(struct Cartridge* c, uint16_t address, uint8_t data, uint64_t cpu_cycle) {
 
 	if (c == NULL) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write PRG function.\n");
@@ -164,7 +164,7 @@ void NF_writeCartPRG(struct Cartridge* c, uint16_t address, uint8_t data, uint64
 	}
 }
 
-uint8_t NF_readCartPRG_RAM(struct Cartridge* c, uint16_t address) {
+uint8_t NES_readCartPRG_RAM(struct Cartridge* c, uint16_t address) {
 
 	if (c == NULL) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to read PRG RAM function.\n");
@@ -180,7 +180,7 @@ uint8_t NF_readCartPRG_RAM(struct Cartridge* c, uint16_t address) {
 	}
 }
 
-void NF_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data) {
+void NES_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data) {
 
 	if (c == NULL) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write PRG RAM function.\n");
@@ -195,7 +195,7 @@ void NF_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data) {
 	}
 }
 
-uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
+uint8_t NES_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
 
 	if (c == NULL) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to read CHR ROM function.\n");
@@ -211,7 +211,7 @@ uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
 	}
 }
 
-void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data) {
+void NES_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data) {
 
 	if (c == NULL) {
 		printf("Error: There is no cartridge connected to the bus, or no cartridge was passed to write CHR function.\n");
@@ -227,45 +227,45 @@ void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data) {
 }
 
 // Some mappers, such as MMC3, watch the PPU address bus to count scanlines. For such carts, pass along every address the PPU drives
-void NF_notifyCartPPUAddress(struct Cartridge* c, uint16_t address, uint64_t cpu_cycle) {
+void NES_notifyCartPPUAddress(struct Cartridge* c, uint16_t address, uint64_t cpu_cycle) {
 	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
 	if (MapperList[c->mapper].notifyPPUAddress != NULL) { MapperList[c->mapper].notifyPPUAddress(c, address, cpu_cycle); }
 }
 
-void NF_notifyCartPPURegisterWrite(struct Cartridge* c, uint16_t address, uint8_t data) {
+void NES_notifyCartPPURegisterWrite(struct Cartridge* c, uint16_t address, uint8_t data) {
 	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
 	if (MapperList[c->mapper].notifyPPURegisterWrite != NULL) { MapperList[c->mapper].notifyPPURegisterWrite(c, address, data); }
 }
 
-uint8_t NF_readCartExpansion(struct Cartridge* c, uint16_t address) {
+uint8_t NES_readCartExpansion(struct Cartridge* c, uint16_t address) {
 	// Nothing drives the bus here on most boards, so reads return open bus. The last byte on the bus is usually the high byte of the address
 	if (c == NULL || c->mapper >= MAPPER_COUNT || MapperList[c->mapper].readExpansion == NULL) { return address >> 8; }
 	return MapperList[c->mapper].readExpansion(c, address);
 }
 
-void NF_writeCartExpansion(struct Cartridge* c, uint16_t address, uint8_t data) {
+void NES_writeCartExpansion(struct Cartridge* c, uint16_t address, uint8_t data) {
 	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
 	if (MapperList[c->mapper].writeExpansion != NULL) { MapperList[c->mapper].writeExpansion(c, address, data); }
 }
 
-bool NF_cartMapsNametables(struct Cartridge* c) {
+bool NES_cartMapsNametables(struct Cartridge* c) {
 	return c != NULL && c->mapper < MAPPER_COUNT && MapperList[c->mapper].readNametable != NULL;
 }
 
-uint8_t NF_readCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram) {
+uint8_t NES_readCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram) {
 	return MapperList[c->mapper].readNametable(c, offset, ciram);
 }
 
-void NF_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram, uint8_t data) {
+void NES_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram, uint8_t data) {
 	MapperList[c->mapper].writeNametable(c, offset, ciram, data);
 }
 
-void NF_tickCart(struct Cartridge* c) {
+void NES_tickCart(struct Cartridge* c) {
 	if (c == NULL || c->mapper >= MAPPER_COUNT) { return; }
 	if (MapperList[c->mapper].tick != NULL) { MapperList[c->mapper].tick(c); }
 }
 
-void NF_freeCartridge(struct Cartridge* c) {
+void NES_freeCartridge(struct Cartridge* c) {
 	if (c == NULL) { return; }
 	if (c->prg_rom != NULL) { free(c->prg_rom); }
 	if (c->chr_rom != NULL) { free(c->chr_rom); }

@@ -1,7 +1,7 @@
 #ifndef MAPPER_1_H
 #define MAPPER_1_H
 
-#include "../NF_Cartridge.h"
+#include "../EmulationLayer/Cartridge.h"
 
 // For information on Mapper 1 (MMC1), see: https://www.nesdev.org/wiki/MMC1
 

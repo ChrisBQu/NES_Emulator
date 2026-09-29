@@ -1,13 +1,13 @@
 #include <SDL.h>
 #include <stdio.h>
-#include "CF_Window.h"
-#include "CF_Controller.h"
-#include "NF_Cartridge.h"
-#include "NF_6502.h"
-#include "NF_Bus.h"
-#include "NF_PPU.h"
-#include "NF_APU.h"
-#include "NF_Palette.h"
+#include "ApplicationLayer/Window.h"
+#include "ApplicationLayer/Controller.h"
+#include "EmulationLayer/Cartridge.h"
+#include "EmulationLayer/6502.h"
+#include "EmulationLayer/Bus.h"
+#include "EmulationLayer/PPU.h"
+#include "EmulationLayer/APU.h"
+#include "EmulationLayer/Palette.h"
 
 bool MAIN = true;
 SDL_Event e;
@@ -29,7 +29,7 @@ SDL_Texture* screenTexture;
 
 // Create a rendering function that will plug into the emulator
 // Each NES pixel fills a block of the framebuffer of a size (SCREEN_SCALE * SCREEN_SCALE)
-void receivePixel(struct NF_Pixel pxl) {
+void receivePixel(struct NES_Pixel pxl) {
     uint32_t color = 0xFF000000u | ((uint32_t)pxl.r << 16) | ((uint32_t)pxl.g << 8) | pxl.b;
     uint32_t* block = &framebuffer[(pxl.y * SCREEN_SCALE) * SCALED_WIDTH + pxl.x * SCREEN_SCALE];
     for (int dy = 0; dy < SCREEN_SCALE; dy++) {
@@ -57,29 +57,29 @@ void quitFunc() { MAIN = false; }
 int main(int arc, char* args[]) {
 
     // Initialize ROM and NES
-    uint8_t* rom_data = NF_readROMtoBuffer("CV3.nes"); // Or any other legal ROM.
+    uint8_t* rom_data = NES_readROMtoBuffer("CV3.nes"); // Or any other legal ROM.
     if (rom_data == NULL) { return 1; }
 
-    struct Cartridge* game_cart = NF_createCartridgeFromBuffer(rom_data);
-    struct NES_Console* console = NF_initConsole();
+    struct Cartridge* game_cart = NES_createCartridgeFromBuffer(rom_data);
+    struct NES_Console* console = NES_initConsole();
     struct Controller* controller_p1 = create_controller();
     struct Controller* controller_p2 = create_controller();
     controller_init_default_bindings(controller_p1);
 
     if (console == 0) { return 1; }
-    CF_pairConsoleToWindow(console);
+    pairConsoleToWindow(console);
 
     // Create a function to receive video output from the emulator
     console->imageOutFunc = *receivePixel;
 
-    if (NF_insertCartridge(console, game_cart) == 1) { return 1; }
+    if (NES_insertCartridge(console, game_cart) == 1) { return 1; }
 
     // Initialize SDL window and renderer
-    CF_init("NES Emulator", SCALED_WIDTH, SCALED_HEIGHT);
+    initWindow("NES Emulator", SCALED_WIDTH, SCALED_HEIGHT);
 
     // Correctly create the renderer
     int v = SDL_Init(SDL_INIT_VIDEO);
-    screenRenderer = SDL_CreateRenderer(CF_getWindow(), -1, SDL_RENDERER_ACCELERATED);
+    screenRenderer = SDL_CreateRenderer(getWindow(), -1, SDL_RENDERER_ACCELERATED);
     if (screenRenderer == NULL) {
         printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
         return -1;
@@ -97,7 +97,7 @@ int main(int arc, char* args[]) {
     }
 
     // Set what happens when X is pressed on window
-    CF_setXFunction(quitFunc);
+    setXFunction(quitFunc);
 
     // Clear once before the first frame
     SDL_SetRenderDrawColor(screenRenderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
@@ -115,7 +115,7 @@ int main(int arc, char* args[]) {
         audio_device = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
     }
     if (audio_device != 0) {
-        NF_APU_setSampleRate(console->ConnectedAPU, AUDIO_SAMPLE_RATE);
+        NES_APU_setSampleRate(console->ConnectedAPU, AUDIO_SAMPLE_RATE);
         console->audioOutFunc = receiveSample;
         SDL_PauseAudioDevice(audio_device, 0);  // Start playback
     }
@@ -137,14 +137,14 @@ int main(int arc, char* args[]) {
 
         // Pass the events to places that need them
         while (SDL_PollEvent(&e) != 0) {
-            CF_handleMenuEvents(e);
+            handleMenuEvents(e);
             controller_handle_input(controller_p1, e);
             controller_handle_input(controller_p2, e);
         }
 
         // Passes the controllers' button states to the controller ports
-        NF_setControllerState(console, 0, controller_get_state_as_byte(controller_p1));
-        NF_setControllerState(console, 1, controller_get_state_as_byte(controller_p2));
+        NES_setControllerState(console, 0, controller_get_state_as_byte(controller_p1));
+        NES_setControllerState(console, 1, controller_get_state_as_byte(controller_p2));
 
         // Handle startup cycles
         if (!startup_ready) {
@@ -155,7 +155,7 @@ int main(int arc, char* args[]) {
 
         // Run the NES master clock until the PPU has output a full frame
         while (!console->ConnectedPPU->frame_complete) {
-            NF_busTickMasterClock(console, startup_ready);
+            NES_busTickMasterClock(console, startup_ready);
         }
         console->ConnectedPPU->frame_complete = false;
 
@@ -193,7 +193,7 @@ int main(int arc, char* args[]) {
     if (audio_device != 0) { SDL_CloseAudioDevice(audio_device); }
     SDL_DestroyTexture(screenTexture);
     SDL_DestroyRenderer(screenRenderer);
-    CF_exit();
+    exitWindow();
 
     return 0;
 }

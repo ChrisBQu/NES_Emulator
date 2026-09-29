@@ -1,5 +1,5 @@
-#ifndef NF_H_CARTRIDGE
-#define NF_H_CARTRIDGE
+#ifndef NES_H_CARTRIDGE
+#define NES_H_CARTRIDGE
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -54,54 +54,54 @@ struct Cartridge {
 
 
 // Load all of the bytes of a file into an array
-uint8_t* NF_readROMtoBuffer(const char* filename);
+uint8_t* NES_readROMtoBuffer(const char* filename);
 
-// Take the buffer returned by NF_reqadROMtoBuffer and turn it into a Cartridge object
-struct Cartridge* NF_createCartridgeFromBuffer(char* rom_data);
+// Take the buffer returned by NES_readROMtoBuffer and turn it into a Cartridge object
+struct Cartridge* NES_createCartridgeFromBuffer(char* rom_data);
 
 // Read PRG ROM from a cartridge
-uint8_t NF_readCartPRG_ROM(struct Cartridge* c, uint16_t address);
+uint8_t NES_readCartPRG_ROM(struct Cartridge* c, uint16_t address);
 
 // Write to the PRG ROM address space of a cartridge ($8000-$FFFF). ROM itself can't change, but mappers use these writes to set their registers.
 // cpu_cycle is the CPU cycle the write happened on, since some mappers ignore writes on consecutive cycles
-void NF_writeCartPRG(struct Cartridge* c, uint16_t address, uint8_t data, uint64_t cpu_cycle);
+void NES_writeCartPRG(struct Cartridge* c, uint16_t address, uint8_t data, uint64_t cpu_cycle);
 
 // Read PRG RAM from a cartridge
-uint8_t NF_readCartPRG_RAM(struct Cartridge* c, uint16_t address);
+uint8_t NES_readCartPRG_RAM(struct Cartridge* c, uint16_t address);
 
 // Write to PRG RAM on a cartridge
-void NF_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data);
+void NES_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data);
 
 // Read CHR ROM from a cartridge
-uint8_t NF_readCartCHR_ROM(struct Cartridge* c, uint16_t address);
+uint8_t NES_readCartCHR_ROM(struct Cartridge* c, uint16_t address);
 
 // Write to CHR memory on a cartridge (only has an effect on boards with CHR RAM)
-void NF_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data);
+void NES_writeCartCHR(struct Cartridge* c, uint16_t address, uint8_t data);
 
 // Tell the mapper about an address the PPU put on its bus (pattern table and nametable accesses, not palette reads, which stay inside the PPU).
 // We pass in the cpu_cycle, since MMC3 (and other(?) mappers?) use the CPU clock to filter the A12 line
-void NF_notifyCartPPUAddress(struct Cartridge* c, uint16_t address, uint64_t cpu_cycle);
+void NES_notifyCartPPUAddress(struct Cartridge* c, uint16_t address, uint64_t cpu_cycle);
 
 // Tell the mapper about a CPU write to a PPU register ($2000-$3FFF). MMC5 watches PPUCTRL to know the sprite size
-void NF_notifyCartPPURegisterWrite(struct Cartridge* c, uint16_t address, uint8_t data);
+void NES_notifyCartPPURegisterWrite(struct Cartridge* c, uint16_t address, uint8_t data);
 
 // Read from the cartridge expansion area ($4020-$5FFF). Returns open bus if the mapper has nothing there
-uint8_t NF_readCartExpansion(struct Cartridge* c, uint16_t address);
+uint8_t NES_readCartExpansion(struct Cartridge* c, uint16_t address);
 
 // Write to the cartridge expansion area ($4020-$5FFF)
-void NF_writeCartExpansion(struct Cartridge* c, uint16_t address, uint8_t data);
+void NES_writeCartExpansion(struct Cartridge* c, uint16_t address, uint8_t data);
 
 // Whether the mapper routes nametable accesses itself, instead of the PPU using the cartridge's nametable_mirroring
-bool NF_cartMapsNametables(struct Cartridge* c);
+bool NES_cartMapsNametables(struct Cartridge* c);
 
 // Read or write a nametable byte through the mapper. offset is 0x000-0xFFF, and ciram is the console's 2KB of nametable RAM
-uint8_t NF_readCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram);
-void NF_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram, uint8_t data);
+uint8_t NES_readCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram);
+void NES_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram, uint8_t data);
 
 // Tick the mapper once per CPU cycle, for mappers that need to keep time
-void NF_tickCart(struct Cartridge* c);
+void NES_tickCart(struct Cartridge* c);
 
 // Free the memory associated with a cartridge
-void NF_freeCartridge(struct Cartridge* c);
+void NES_freeCartridge(struct Cartridge* c);
 
 #endif

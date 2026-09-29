@@ -1,5 +1,5 @@
-#include "NF_APU.h"
-#include "NF_6502.h"
+#include "APU.h"
+#include "6502.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +67,7 @@ static const uint16_t dmc_rate_table[16] = {
 #define HIGHPASS_CUTOFF_HZ 90.0
 
 // Constructor
-struct AudioProcessingUnit* NF_initAPU() {
+struct AudioProcessingUnit* NES_initAPU() {
 	struct AudioProcessingUnit* apu = malloc(sizeof(struct AudioProcessingUnit));
 	if (apu == NULL) {
 		printf("Error: Could not create APU object. Out of memory?\n");
@@ -75,12 +75,12 @@ struct AudioProcessingUnit* NF_initAPU() {
 	}
 	apu->bus = NULL;
 	apu->sample_rate = 44100.0;
-	NF_APU_resetState(apu);
+	NES_APU_resetState(apu);
 	return apu;
 }
 
 // Put the APU back into its power-on state. The bus pointer and output sample rate are kept
-void NF_APU_resetState(struct AudioProcessingUnit* apu) {
+void NES_APU_resetState(struct AudioProcessingUnit* apu) {
 	struct NES_Console* bus = apu->bus;
 	double sample_rate = apu->sample_rate;
 	memset(apu, 0, sizeof(struct AudioProcessingUnit));
@@ -95,11 +95,11 @@ void NF_APU_resetState(struct AudioProcessingUnit* apu) {
 	apu->dmc.sample_buffer_empty = true;
 	apu->dmc.bits_remaining = 8;
 	apu->dmc.silence = true;
-	NF_APU_setSampleRate(apu, sample_rate);
+	NES_APU_setSampleRate(apu, sample_rate);
 }
 
 // Set the output sample rate, and recompute the high-pass filter coefficient for that rate
-void NF_APU_setSampleRate(struct AudioProcessingUnit* apu, double sample_rate) {
+void NES_APU_setSampleRate(struct AudioProcessingUnit* apu, double sample_rate) {
 	apu->sample_rate = sample_rate;
 	apu->sample_clock = 0.0;
 	apu->sample_sum = 0.0f;
@@ -116,7 +116,7 @@ void NF_APU_setSampleRate(struct AudioProcessingUnit* apu, double sample_rate) {
 
 // Tick the envelope, which either restarts at 15 or fades the volume down one level each time its divider expires
 // See: https://www.nesdev.org/wiki/APU_Envelope
-static void tickEnvelope(struct NF_APU_Envelope* env) {
+static void tickEnvelope(struct NES_APU_Envelope* env) {
 	if (env->start) {
 		env->start = false;
 		env->decay = 15;
@@ -131,12 +131,12 @@ static void tickEnvelope(struct NF_APU_Envelope* env) {
 }
 
 // The envelope's current volume: either the constant volume, or the decaying level
-static uint8_t envelopeOutput(struct NF_APU_Envelope* env) {
+static uint8_t envelopeOutput(struct NES_APU_Envelope* env) {
 	return env->constant ? env->volume : env->decay;
 }
 
 // The period the sweep unit is trying to change to. Pulse 1 subtracts an extra 1 when negating
-static uint16_t sweepTargetPeriod(struct NF_APU_Pulse* pulse) {
+static uint16_t sweepTargetPeriod(struct NES_APU_Pulse* pulse) {
 	uint16_t change = pulse->timer_period >> pulse->sweep_shift;
 	if (pulse->sweep_negate) {
 		int target = (int)pulse->timer_period - change - (pulse->is_pulse1 ? 1 : 0);
@@ -146,13 +146,13 @@ static uint16_t sweepTargetPeriod(struct NF_APU_Pulse* pulse) {
 }
 
 // The sweep unit mutes the channel if the period is too low, or if the target period would overflow
-static bool pulseMuted(struct NF_APU_Pulse* pulse) {
+static bool pulseMuted(struct NES_APU_Pulse* pulse) {
 	return pulse->timer_period < 8 || sweepTargetPeriod(pulse) > 0x7FF;
 }
 
 // Tick the sweep unit, which slides the pulse channel's pitch up or down by periodically changing its period
 // See: https://www.nesdev.org/wiki/APU_Sweep
-static void tickSweep(struct NF_APU_Pulse* pulse) {
+static void tickSweep(struct NES_APU_Pulse* pulse) {
 	if (pulse->sweep_divider == 0 && pulse->sweep_enabled && pulse->sweep_shift > 0 && !pulseMuted(pulse)) {
 		pulse->timer_period = sweepTargetPeriod(pulse);
 	}
@@ -165,7 +165,7 @@ static void tickSweep(struct NF_APU_Pulse* pulse) {
 
 // Count down the pulse timer, and step to the next position in the duty pattern each time it expires
 // See: https://www.nesdev.org/wiki/APU_Pulse
-static void tickPulseTimer(struct NF_APU_Pulse* pulse) {
+static void tickPulseTimer(struct NES_APU_Pulse* pulse) {
 	if (pulse->timer == 0) {
 		pulse->timer = pulse->timer_period;
 		pulse->sequence_pos = (pulse->sequence_pos + 1) & 0x07;
@@ -174,14 +174,14 @@ static void tickPulseTimer(struct NF_APU_Pulse* pulse) {
 }
 
 // The pulse channel's current output level: the envelope volume on a 1 step of its duty pattern, otherwise 0
-static uint8_t pulseOutput(struct NF_APU_Pulse* pulse) {
+static uint8_t pulseOutput(struct NES_APU_Pulse* pulse) {
 	if (pulse->length == 0 || pulseMuted(pulse)) { return 0; }
 	if (pulse_duty_table[pulse->duty][pulse->sequence_pos] == 0) { return 0; }
 	return envelopeOutput(&pulse->envelope);
 }
 
 // Handle a write to one of a pulse channel's 4 registers (reg 0-3), setting its duty, envelope, sweep or period
-static void writePulse(struct NF_APU_Pulse* pulse, uint8_t reg, uint8_t data) {
+static void writePulse(struct NES_APU_Pulse* pulse, uint8_t reg, uint8_t data) {
 	switch (reg) {
 	case 0:
 		pulse->duty = data >> 6;
@@ -209,14 +209,14 @@ static void writePulse(struct NF_APU_Pulse* pulse, uint8_t reg, uint8_t data) {
 }
 
 // Reload or count down the triangle's linear counter, which gives it a finer-grained duration than the length counter
-static void tickLinearCounter(struct NF_APU_Triangle* tri) {
+static void tickLinearCounter(struct NES_APU_Triangle* tri) {
 	if (tri->linear_reload_flag) { tri->linear_counter = tri->linear_reload; }
 	else if (tri->linear_counter > 0) { tri->linear_counter--; }
 	if (!tri->control) { tri->linear_reload_flag = false; }
 }
 
 // Count down the triangle timer, and step through the waveform each time it expires (if both counters are non-zero)
-static void tickTriangleTimer(struct NF_APU_Triangle* tri) {
+static void tickTriangleTimer(struct NES_APU_Triangle* tri) {
 	if (tri->timer == 0) {
 		tri->timer = tri->timer_period;
 		// Very low periods produce ultrasonic frequencies that just pop, so hold the sequencer instead
@@ -228,13 +228,13 @@ static void tickTriangleTimer(struct NF_APU_Triangle* tri) {
 }
 
 // The triangle has no volume control. When silenced it holds its last output level
-static uint8_t triangleOutput(struct NF_APU_Triangle* tri) {
+static uint8_t triangleOutput(struct NES_APU_Triangle* tri) {
 	return triangle_table[tri->sequence_pos];
 }
 
 // Count down the noise timer, and shift a new pseudo-random bit into the shift register each time it expires
 // See: https://www.nesdev.org/wiki/APU_Noise
-static void tickNoiseTimer(struct NF_APU_Noise* noise) {
+static void tickNoiseTimer(struct NES_APU_Noise* noise) {
 	if (noise->timer == 0) {
 		noise->timer = noise->timer_period;
 		uint16_t other_bit = noise->mode ? (noise->shift_register >> 6) : (noise->shift_register >> 1);
@@ -245,13 +245,13 @@ static void tickNoiseTimer(struct NF_APU_Noise* noise) {
 }
 
 // The noise channel's current output level: silent when bit 0 of the shift register is set or the length counter is 0
-static uint8_t noiseOutput(struct NF_APU_Noise* noise) {
+static uint8_t noiseOutput(struct NES_APU_Noise* noise) {
 	if (noise->length == 0 || (noise->shift_register & 0x01)) { return 0; }
 	return envelopeOutput(&noise->envelope);
 }
 
 // Start playing the sample from the beginning
-static void restartDMCSample(struct NF_APU_DMC* dmc) {
+static void restartDMCSample(struct NES_APU_DMC* dmc) {
 	dmc->current_address = dmc->sample_address;
 	dmc->bytes_remaining = dmc->sample_length;
 }
@@ -259,10 +259,10 @@ static void restartDMCSample(struct NF_APU_DMC* dmc) {
 // If the sample buffer is empty and the sample isn't finished, fetch the next sample byte into it, pausing the CPU
 // See: https://www.nesdev.org/wiki/APU_DMC
 static void fillDMCSampleBuffer(struct AudioProcessingUnit* apu) {
-	struct NF_APU_DMC* dmc = &apu->dmc;
+	struct NES_APU_DMC* dmc = &apu->dmc;
 	if (!dmc->sample_buffer_empty || dmc->bytes_remaining == 0) { return; }
 
-	dmc->sample_buffer = NF_readMemory(apu->bus, dmc->current_address);
+	dmc->sample_buffer = NES_readMemory(apu->bus, dmc->current_address);
 	dmc->sample_buffer_empty = false;
 	apu->bus->ConnectedProcessor->cycles += DMC_FETCH_STALL_CYCLES;
 
@@ -278,7 +278,7 @@ static void fillDMCSampleBuffer(struct AudioProcessingUnit* apu) {
 
 // Count down the DMC timer, and each time it expires move the output level up or down by 2 based on the next sample bit
 // See: https://www.nesdev.org/wiki/APU_DMC
-static void tickDMCTimer(struct NF_APU_DMC* dmc) {
+static void tickDMCTimer(struct NES_APU_DMC* dmc) {
 	if (dmc->timer > 0) {
 		dmc->timer--;
 		return;
@@ -377,8 +377,8 @@ static void generateSample(struct AudioProcessingUnit* apu) {
 	apu->sample_count++;
 	apu->sample_clock += apu->sample_rate;
 
-	if (apu->sample_clock >= NF_APU_CPU_CLOCK_RATE) {
-		apu->sample_clock -= NF_APU_CPU_CLOCK_RATE;
+	if (apu->sample_clock >= NES_APU_CPU_CLOCK_RATE) {
+		apu->sample_clock -= NES_APU_CPU_CLOCK_RATE;
 
 		float in = apu->sample_sum / (float)apu->sample_count;
 		float out = apu->highpass_coefficient * (apu->highpass_prev_out + in - apu->highpass_prev_in);
@@ -392,7 +392,7 @@ static void generateSample(struct AudioProcessingUnit* apu) {
 }
 
 // Advance the APU by one CPU cycle: step the frame counter and channel timers, then produce audio output
-void NF_APU_tickClock(struct AudioProcessingUnit* apu) {
+void NES_APU_tickClock(struct AudioProcessingUnit* apu) {
 	tickFrameCounter(apu);
 
 	// The triangle, noise and DMC timers run at the CPU rate, the pulse timers at half of it
@@ -410,7 +410,7 @@ void NF_APU_tickClock(struct AudioProcessingUnit* apu) {
 }
 
 // Handle a CPU write to one of the APU registers, updating the channel or frame counter it controls
-void NF_APU_writeRegister(struct AudioProcessingUnit* apu, uint16_t address, uint8_t data) {
+void NES_APU_writeRegister(struct AudioProcessingUnit* apu, uint16_t address, uint8_t data) {
 	switch (address) {
 
 	// Pulse 1
@@ -505,7 +505,7 @@ void NF_APU_writeRegister(struct AudioProcessingUnit* apu, uint16_t address, uin
 }
 
 // Read the status register ($4015): which channels are still playing, plus the frame IRQ flag, which reading clears
-uint8_t NF_APU_readStatus(struct AudioProcessingUnit* apu) {
+uint8_t NES_APU_readStatus(struct AudioProcessingUnit* apu) {
 	uint8_t status = 0;
 	if (apu->pulse1.length > 0) { status |= 0x01; }
 	if (apu->pulse2.length > 0) { status |= 0x02; }

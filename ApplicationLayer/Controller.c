@@ -1,4 +1,4 @@
-#include "CF_Controller.h"
+#include "Controller.h"
 #include "string.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -93,7 +93,7 @@ void destroy_controller(Controller* controller) {
 }
 
 // Bind a keyboarrd key to an SDL button
-void controller_bind_key_to_button(Controller* controller, SDL_Keycode key, CF_BUTTON button) {
+void controller_bind_key_to_button(Controller* controller, SDL_Keycode key, CONTROLLER_BUTTON button) {
 	if (controller == NULL || button < 0 || button >= MAX_NUMBER_OF_CONTROLLER_BUTTONS) { return; }
 	hashmap_set(controller->bindings, &key, &controller->button_ids[button]);
 }

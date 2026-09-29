@@ -1,7 +1,7 @@
 #ifndef MAPPER_2_H
 #define MAPPER_2_H
 
-#include "../NF_Cartridge.h"
+#include "../EmulationLayer/Cartridge.h"
 
 // For information on Mapper 2 (UxROM), see: https://www.nesdev.org/wiki/UxROM
 

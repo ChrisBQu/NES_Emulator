@@ -1,6 +1,6 @@
-#ifndef NF_CONTROLLER_PORT_H
-#define NF_CONTROLLER_PORT_H
-#include "NF_Bus.h"
+#ifndef NES_CONTROLLER_PORT_H
+#define NES_CONTROLLER_PORT_H
+#include "Bus.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -14,11 +14,11 @@ struct ControllerPort {
 };
 
 // Must be called once to create the ControllerPort object
-struct ControllerPort* NF_initControllerPort();
+struct ControllerPort* NES_initControllerPort();
 
 // Shouuld be called once per frame, passing in the state of the buttons
 // The state can come from, i.e. reading a gamepad. But it does not come from the emulation layer.
 // bit 0 = A, 1 = B, 2 = Select, 3 = Start, 4 = Up, 5 = Down, 6 = Left, 7 = Right
-void NF_setControllerState(struct NES_Console* console, int port, uint8_t state);
+void NES_setControllerState(struct NES_Console* console, int port, uint8_t state);
 
 #endif

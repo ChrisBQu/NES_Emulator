@@ -1,25 +1,25 @@
-#include "NF_PPU.h"
-#include "NF_6502.h"
-#include "NF_Palette.h"
-#include "NF_Cartridge.h"
+#include "PPU.h"
+#include "6502.h"
+#include "Palette.h"
+#include "Cartridge.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 // Constructor
-struct PictureProcessingUnit* NF_initPPU() {
+struct PictureProcessingUnit* NES_initPPU() {
 	struct PictureProcessingUnit* newppu = malloc(sizeof(struct PictureProcessingUnit));
 	if (newppu == NULL) {
 		printf("Error: Could not create PPU object. Out of memory?\n");
 		return 0;
 	}
 	newppu->bus = NULL;
-	NF_PPU_resetState(newppu);
+	NES_PPU_resetState(newppu);
 	return newppu;
 }
 
 // Put the PPU back into its power-on state, clearing its registers and memory. The bus pointer is kept
-void NF_PPU_resetState(struct PictureProcessingUnit* ppu) {
+void NES_PPU_resetState(struct PictureProcessingUnit* ppu) {
 	ppu->cycle = 21; // 7 startup cycles for CPU x3 = 21
 	ppu->scanline = 0;
 	ppu->odd_frame = false;
@@ -59,7 +59,7 @@ void NF_PPU_resetState(struct PictureProcessingUnit* ppu) {
 }
 
 // Copy 256 bytes into OAM starting at OAMADDR (wrapping around), as the OAM DMA at $4014 does
-void NF_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page) {
+void NES_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page) {
 	for (int i = 0; i < PPU_OAM_MEMORY_SIZE; i++) {
 		ppu->PPU_OAM[(uint8_t)(ppu->reg_OAMADDR + i)] = page[i];
 	}
@@ -69,7 +69,7 @@ void NF_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page) 
 // The cartridge can see every address the PPU puts on its external bus, and some mappers (MMC3) watch it to count scanlines.
 static void PPU_driveBus(struct PictureProcessingUnit* ppu, uint16_t addr) {
 	if (addr >= 0x3F00) { return; }
-	NF_notifyCartPPUAddress(ppu->bus->ConnectedCartridge, addr, ppu->bus->ConnectedProcessor->cycle_count);
+	NES_notifyCartPPUAddress(ppu->bus->ConnectedCartridge, addr, ppu->bus->ConnectedProcessor->cycle_count);
 }
 
 // Helper function
@@ -79,13 +79,13 @@ static bool PPU_isRendering(struct PictureProcessingUnit* ppu) {
 }
 
 // Write to the PPU address space
-void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_t data) {
+void NES_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_t data) {
 	addr &= 0x3FFF;  // Mask to the PPU address space (0x0000 - 0x3FFF)
 	PPU_driveBus(ppu, addr);
 
 	// Handle pattern table writes (only possible on boards that use CHR RAM instead of CHR ROM)
 	if (addr < NAMETABLE_0_ADDRESS) {
-		NF_writeCartCHR(ppu->bus->ConnectedCartridge, addr, data);
+		NES_writeCartCHR(ppu->bus->ConnectedCartridge, addr, data);
 	}
 
 	// Handle nametable memory writes
@@ -100,8 +100,8 @@ void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_
 		addr -= 0x2000;
 
 		// Some mappers (MMC5) re-route where nametables come from
-		if (NF_cartMapsNametables(ppu->bus->ConnectedCartridge)) {
-			NF_writeCartNametable(ppu->bus->ConnectedCartridge, addr, ppu->PPU_NametableMemory, data);
+		if (NES_cartMapsNametables(ppu->bus->ConnectedCartridge)) {
+			NES_writeCartNametable(ppu->bus->ConnectedCartridge, addr, ppu->PPU_NametableMemory, data);
 			return;
 		}
 
@@ -152,13 +152,13 @@ void NF_PPU_writeMemory(struct PictureProcessingUnit* ppu, uint16_t addr, uint8_
 
 
 // Read from the PPU address space
-uint8_t NF_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
+uint8_t NES_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
     addr &= 0x3FFF;  // Mask to the PPU address space (0x0000 - 0x3FFF)
     PPU_driveBus(ppu, addr);
 
     // Handle cartridge CHR-ROM reads
     if (addr < NAMETABLE_0_ADDRESS) {
-        return NF_readCartCHR_ROM(ppu->bus->ConnectedCartridge, addr);
+        return NES_readCartCHR_ROM(ppu->bus->ConnectedCartridge, addr);
     }
 
     // Handle nametable memory reads
@@ -172,8 +172,8 @@ uint8_t NF_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
         addr -= 0x2000;
 
         // Some mappers (MMC5) decide where each nametable comes from themselves
-        if (NF_cartMapsNametables(ppu->bus->ConnectedCartridge)) {
-            return NF_readCartNametable(ppu->bus->ConnectedCartridge, addr, ppu->PPU_NametableMemory);
+        if (NES_cartMapsNametables(ppu->bus->ConnectedCartridge)) {
+            return NES_readCartNametable(ppu->bus->ConnectedCartridge, addr, ppu->PPU_NametableMemory);
         }
 
         // Nametable mirroring based on cartridge configuration (Horizontal/Vertical)
@@ -218,7 +218,7 @@ uint8_t NF_PPU_readMemory(struct PictureProcessingUnit* ppu, uint16_t addr) {
 // Read one of the eight PPU registers
 // "Reading any readable port(PPUSTATUS, OAMDATA, or PPUDATA) also fills the latch with the bits read.
 // Reading a nominally "write-only" register returns the latch's current value" - wiki.nesdev.com
-uint8_t NF_PPU_readRegister(struct PictureProcessingUnit *ppu, PPU_REGISTER reg) {
+uint8_t NES_PPU_readRegister(struct PictureProcessingUnit *ppu, PPU_REGISTER reg) {
 	uint8_t tmp;
 	switch (reg) {
 		case REG_PPUCTRL:
@@ -247,8 +247,8 @@ uint8_t NF_PPU_readRegister(struct PictureProcessingUnit *ppu, PPU_REGISTER reg)
 		case REG_PPUDATA:
 			tmp = ppu->delayed_buffer;
 			// Delayed read for VRAM (0x0000-0x3EFF), immediate read for palette data
-			if ((ppu->vram_addr.address & 0x3FFF) >= 0x3F00) { tmp = NF_PPU_readMemory(ppu, ppu->vram_addr.address); }
-			ppu->delayed_buffer = NF_PPU_readMemory(ppu, ppu->vram_addr.address);
+			if ((ppu->vram_addr.address & 0x3FFF) >= 0x3F00) { tmp = NES_PPU_readMemory(ppu, ppu->vram_addr.address); }
+			ppu->delayed_buffer = NES_PPU_readMemory(ppu, ppu->vram_addr.address);
 			ppu->vram_addr.address += (ppu->reg_PPUCTRL & 0x04) ? 32 : 1; // Horizontal or vertical reading depending on if the bit is set
 			return tmp;
 		default:
@@ -259,12 +259,12 @@ uint8_t NF_PPU_readRegister(struct PictureProcessingUnit *ppu, PPU_REGISTER reg)
 }
 
 // Write one of the eight PPU registers
-void NF_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, uint8_t data) {
+void NES_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, uint8_t data) {
 	switch (reg) {
 	case REG_PPUCTRL:
 		// Enabling NMI while already in VBlank immediately triggers an NMI
 		if (!(ppu->reg_PPUCTRL & 0x80) && (data & 0x80) && (ppu->reg_PPUSTATUS & 0x80)) {
-			NF_emitNMI(ppu->bus);
+			NES_emitNMI(ppu->bus);
 		}
 		ppu->reg_PPUCTRL = data;
 		ppu->tram_addr.nametable_x = (data & 0x01);
@@ -311,7 +311,7 @@ void NF_PPU_writeRegister(struct PictureProcessingUnit* ppu, PPU_REGISTER reg, u
 		}
 		break;
 	case REG_PPUDATA:
-		NF_PPU_writeMemory(ppu, ppu->vram_addr.address, data);
+		NES_PPU_writeMemory(ppu, ppu->vram_addr.address, data);
 		ppu->vram_addr.address += (ppu->reg_PPUCTRL & 0x04) ? 32 : 1;
 		break;
 	default:
@@ -419,7 +419,7 @@ static void PPU_evaluateSprites(struct PictureProcessingUnit* ppu) {
         if (diff < 0 || diff >= height) { continue; }
 
         if (ppu->sprite_count < PPU_MAX_SPRITES_PER_SCANLINE) {
-            struct NF_SpriteEntry* s = &ppu->sprite_scanline[ppu->sprite_count++];
+            struct NES_SpriteEntry* s = &ppu->sprite_scanline[ppu->sprite_count++];
             s->y = entry[0];
             s->id = entry[1];
             s->attr = entry[2];
@@ -458,23 +458,23 @@ static uint16_t PPU_spritePatternAddress(struct PictureProcessingUnit* ppu, uint
 static void PPU_fetchSpriteSlot(struct PictureProcessingUnit* ppu) {
     int slot = (ppu->cycle - 257) / 8;
     bool used = slot < ppu->sprite_count;
-    struct NF_SpriteEntry* s = &ppu->sprite_scanline[slot];
+    struct NES_SpriteEntry* s = &ppu->sprite_scanline[slot];
     uint16_t addr = used ? PPU_spritePatternAddress(ppu, s->id, s->attr, (uint8_t)(ppu->scanline - s->y))
                          : PPU_spritePatternAddress(ppu, 0xFF, 0x00, 0);
 
     switch ((ppu->cycle - 257) % 8) {
         case 0:
         case 2:
-            NF_PPU_readMemory(ppu, 0x2000 | (ppu->vram_addr.address & 0x0FFF));
+            NES_PPU_readMemory(ppu, 0x2000 | (ppu->vram_addr.address & 0x0FFF));
             break;
         case 4: {
             // Horizontal flip: reverse the row so the leftmost pixel is always in bit 7
-            uint8_t lo = NF_PPU_readMemory(ppu, addr);
+            uint8_t lo = NES_PPU_readMemory(ppu, addr);
             if (used) { ppu->sprite_shifter_pattern_lo[slot] = (s->attr & 0x40) ? PPU_reverseBits(lo) : lo; }
             break;
         }
         case 6: {
-            uint8_t hi = NF_PPU_readMemory(ppu, addr + 8);
+            uint8_t hi = NES_PPU_readMemory(ppu, addr + 8);
             if (used) { ppu->sprite_shifter_pattern_hi[slot] = (s->attr & 0x40) ? PPU_reverseBits(hi) : hi; }
             break;
         }
@@ -497,7 +497,7 @@ static void PPU_updateSpriteShifters(struct PictureProcessingUnit* ppu) {
 
 // Every time the PPU clock ticks, a pixel will be rendered to the screen, and the (virtual) scanline-beam will be adjusted if necessary
 // Additionally, a NMI will be emitted if necessary, and the PPU registers will be updated accordingly
-void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
+void NES_PPU_tickClock(struct PictureProcessingUnit* ppu) {
     ppu->cycle++;
 
     if (ppu->cycle >= PPU_CYCLE_MAX) {
@@ -532,7 +532,7 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
         // The nametable fetch for the third tile. It already happened at cycle 340 (so v hasn't moved since), but real hardware
         // fetches it here, and MMC5 detects the start of a scanline by seeing this address read three times in a row
         if (rendering && ppu->cycle == 1) {
-            ppu->bg_next_tile_id = NF_PPU_readMemory(ppu, 0x2000 | (ppu->vram_addr.address & 0x0FFF));
+            ppu->bg_next_tile_id = NES_PPU_readMemory(ppu, 0x2000 | (ppu->vram_addr.address & 0x0FFF));
         }
 
         // Background tile fetch pipeline: cycles 2-256 (visible) and 321-337 (prefetch next scanline's first two tiles).
@@ -545,12 +545,12 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
                 case 0:
                     // Step 1: Load previous latch data into shift registers, then fetch the nametable byte for the next tile
                     PPU_loadBackgroundShifters(ppu);
-                    ppu->bg_next_tile_id = NF_PPU_readMemory(ppu,
+                    ppu->bg_next_tile_id = NES_PPU_readMemory(ppu,
                         0x2000 | (ppu->vram_addr.address & 0x0FFF));
                     break;
                 case 2:
                     // Step 2: Fetch the attribute byte that covers this tile's 4x4-tile block
-                    ppu->bg_next_tile_attrib = NF_PPU_readMemory(ppu,
+                    ppu->bg_next_tile_attrib = NES_PPU_readMemory(ppu,
                         0x23C0
                         | ((uint16_t)ppu->vram_addr.nametable_y << 11)
                         | ((uint16_t)ppu->vram_addr.nametable_x << 10)
@@ -563,14 +563,14 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
                     break;
                 case 4:
                     // Step 3: Fetch the low bitplane byte for this tile row from the pattern table
-                    ppu->bg_next_tile_lsb = NF_PPU_readMemory(ppu,
+                    ppu->bg_next_tile_lsb = NES_PPU_readMemory(ppu,
                         ((ppu->reg_PPUCTRL & 0x10) ? 0x1000 : 0x0000)
                         + ((uint16_t)ppu->bg_next_tile_id << 4)
                         + ppu->vram_addr.fine_y);
                     break;
                 case 6:
                     // Step 4: Fetch the high bitplane byte (8 bytes after the low byte in the pattern table)
-                    ppu->bg_next_tile_msb = NF_PPU_readMemory(ppu,
+                    ppu->bg_next_tile_msb = NES_PPU_readMemory(ppu,
                         ((ppu->reg_PPUCTRL & 0x10) ? 0x1000 : 0x0000)
                         + ((uint16_t)ppu->bg_next_tile_id << 4)
                         + ppu->vram_addr.fine_y + 8);
@@ -609,7 +609,7 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
 
         // Dummy nametable fetches at end of scanline (cycles 338 and 340)
         if (rendering && (ppu->cycle == 338 || ppu->cycle == 340)) {
-            ppu->bg_next_tile_id = NF_PPU_readMemory(ppu,
+            ppu->bg_next_tile_id = NES_PPU_readMemory(ppu,
                 0x2000 | (ppu->vram_addr.address & 0x0FFF));
         }
 
@@ -622,7 +622,7 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
     // Enter VBlank at scanline 241, cycle 1 (the flag is cleared again at scanline 261, cycle 1)
     if (ppu->scanline == 241 && ppu->cycle == 1) {
         ppu->reg_PPUSTATUS |= 0x80;
-        if (ppu->reg_PPUCTRL & 0x80) { NF_emitNMI(ppu->bus); }
+        if (ppu->reg_PPUCTRL & 0x80) { NES_emitNMI(ppu->bus); }
     }
 
     // Output one visible pixel
@@ -702,11 +702,11 @@ void NF_PPU_tickClock(struct PictureProcessingUnit* ppu) {
 
         // Look up the NES system colour for this palette+pixel combination.
         // Mask to 6 bits: the NES hardware ignores bits 6-7 of palette entries.
-        uint8_t palette_index = NF_PPU_readMemory(ppu, 0x3F00 + (pixel_palette << 2) + pixel_value) & 0x3F;
+        uint8_t palette_index = NES_PPU_readMemory(ppu, 0x3F00 + (pixel_palette << 2) + pixel_value) & 0x3F;
         if (ppu->reg_PPUMASK & 0x01) { palette_index &= 0x30; }  // Grayscale mode
-        const uint8_t* color  = NF_getNESColor(palette_index);
+        const uint8_t* color  = NES_getNESColor(palette_index);
 
-        struct NF_Pixel pixel;
+        struct NES_Pixel pixel;
         pixel.x = ppu->cycle - 1;   // cycles are 1-indexed; x is 0-indexed
         pixel.y = ppu->scanline;
         pixel.r = color[0];

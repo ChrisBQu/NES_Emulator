@@ -1,7 +1,7 @@
 #ifndef MAPPER_5_H
 #define MAPPER_5_H
 
-#include "../NF_Cartridge.h"
+#include "../EmulationLayer/Cartridge.h"
 
 // For information on Mapper 5 (MMC5), see: https://www.nesdev.org/wiki/MMC5
 // Not implemented: expansion audio ($5000-$5015) and vertical split mode ($5200-$5202)
