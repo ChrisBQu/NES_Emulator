@@ -190,5 +190,4 @@ void NES_PPU_resetState(struct PictureProcessingUnit* ppu);
 // Copy 256 bytes into OAM starting at OAMADDR (used by the OAM DMA at $4014)
 void NES_PPU_writeOAMDMA(struct PictureProcessingUnit* ppu, const uint8_t* page);
 
-
 #endif

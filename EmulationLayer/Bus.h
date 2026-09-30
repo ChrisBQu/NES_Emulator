@@ -21,6 +21,7 @@
 // $FFFC-FFFD: Reset Vector
 // $FFFE-FFFF: IRQ Vector
 
+#define NES_MEMORY_SIZE 0x10000
 #define NES_6502_STACK_LOCATION (uint16_t)0x0100
 #define NES_6502_ROM_LOCATION (uint16_t)0x8000
 #define NES_6502_NMI_VECTOR (uint16_t)0xFFFA
@@ -30,7 +31,7 @@
 // This structure represents the console itself. It bundles objects making up the physical parts of the
 // console, and acts as a bus, allowing them to communicate with one another
 struct NES_Console {
-	uint8_t Memory[0x10000];
+	uint8_t Memory[NES_MEMORY_SIZE];
 	struct Cartridge* ConnectedCartridge;
 	struct Processor* ConnectedProcessor;
 	struct PictureProcessingUnit* ConnectedPPU;

@@ -1,7 +1,7 @@
 #ifndef MAPPER_0_H
 #define MAPPER_0_H
 
-#include "../EmulationLayer/Cartridge.h"
+#include "../Cartridge.h"
 
 bool Mapper0_init(struct Cartridge* c);
 uint8_t Mapper0_readPRG_ROM(struct Cartridge* c, uint16_t address);

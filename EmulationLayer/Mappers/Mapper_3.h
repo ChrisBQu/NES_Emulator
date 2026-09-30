@@ -1,7 +1,7 @@
 #ifndef MAPPER_3_H
 #define MAPPER_3_H
 
-#include "../EmulationLayer/Cartridge.h"
+#include "../Cartridge.h"
 
 // For information on Mapper 3 (CNROM), see: https://www.nesdev.org/wiki/CNROM
 

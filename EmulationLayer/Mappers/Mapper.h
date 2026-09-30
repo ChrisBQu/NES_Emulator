@@ -1,7 +1,8 @@
 #ifndef MAPPER_H
 #define MAPPER_H
 
-#include "../EmulationLayer/Cartridge.h"
+#include "../Cartridge.h"
+#include <stddef.h>
 
 #include "Mapper_0.h"
 #include "Mapper_1.h"
@@ -13,6 +14,7 @@
 // Mappers are used to handle the different types of cartridges that can be used with the NES
 // Each mapper contains a set of functions defining how the cartridge is read from and written to
 struct Mapper {
+	size_t state_size;	// Size of the struct init puts in mapper_state, 0 for mappers without one
 	bool (*init)(struct Cartridge* c);
 	uint8_t (*readPRG_ROM)(struct Cartridge* c, uint16_t address);
 	void (*writePRG)(struct Cartridge* c, uint16_t address, uint8_t data, uint64_t cpu_cycle);

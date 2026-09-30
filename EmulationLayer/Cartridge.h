@@ -2,6 +2,7 @@
 #define NES_H_CARTRIDGE
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 // Two types of headers are supported by this emulator, iNES and NES 2.0
 typedef enum {
@@ -49,6 +50,7 @@ struct Cartridge {
 	SCROLL_MAPPING_TYPE nametable_mirroring;
 	void* mapper_state;			// Mapper-specific registers (bank selects etc.), NULL for mappers without any
 	bool irq_asserted;			// The mapper is holding the CPU's /IRQ line low
+	uint32_t checksum;			// The checksum of the ROM, used to uniquely identify the game
 };
 
 
@@ -100,6 +102,17 @@ void NES_writeCartNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram
 
 // Tick the mapper once per CPU cycle, for mappers that need to keep time
 void NES_tickCart(struct Cartridge* c);
+
+// Make a deep copy of a cartridge, including its ROM, RAM and mapper state. Free it with NES_freeCartridge
+struct Cartridge* NES_copyCartridge(const struct Cartridge* c);
+
+// Write the parts of a cartridge that change as the game runs (RAM, mapper state) to an open file. The ROM is never written,
+// only a checksum identifying the game. Returns 0 on success
+int NES_writeCartridgeState(const struct Cartridge* c, FILE* f);
+
+// Read state written by NES_writeCartridgeState, and combine it with the ROM of rom (the game that's running) into a new cartridge.
+// Returns NULL if the state is from a different game, or is truncated or invalid. Free it with NES_freeCartridge
+struct Cartridge* NES_readCartridgeState(const struct Cartridge* rom, FILE* f);
 
 // Free the memory associated with a cartridge
 void NES_freeCartridge(struct Cartridge* c);

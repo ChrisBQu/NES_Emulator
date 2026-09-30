@@ -723,5 +723,3 @@ void NES_PPU_tickClock(struct PictureProcessingUnit* ppu) {
         }
     }
 }
-
-

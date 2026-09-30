@@ -1,7 +1,7 @@
 #ifndef MAPPER_4_H
 #define MAPPER_4_H
 
-#include "../EmulationLayer/Cartridge.h"
+#include "../Cartridge.h"
 
 // For information on Mapper 4 (MMC3), see: https://www.nesdev.org/wiki/MMC3
 
