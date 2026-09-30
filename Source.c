@@ -68,6 +68,7 @@ int main(int arc, char* args[]) {
 
     if (console == 0) { return 1; }
     pairConsoleToWindow(console);
+    pairControllersToWindow(controller_p1, controller_p2);
 
     // Create a function to receive video output from the emulator
     console->imageOutFunc = *receivePixel;
@@ -121,6 +122,11 @@ int main(int arc, char* args[]) {
     }
     else {
         printf("Warning: Could not open an audio device, running without sound. SDL Error: %s\n", SDL_GetError());
+    }
+
+    // Start gamepad support. The controllers open their pads when SDL reports them, including pads already plugged in
+    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0) {
+        printf("Warning: Could not start gamepad support, only the keyboard will work. SDL Error: %s\n", SDL_GetError());
     }
 
     // With audio, the emulator is paced by the sound card: it only runs another frame once the queued audio drops below

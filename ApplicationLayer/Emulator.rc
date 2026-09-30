@@ -1,0 +1,147 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "winres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (United States) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""winres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+ID_DIALOG_CONFIGURE_CONTROLLERS DIALOGEX 0, 0, 327, 205
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Configure Controllers"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,223,178,50,14
+    GROUPBOX        "Controller 1",IDC_STATIC,19,18,129,152
+    RTEXT           "A",IDC_STATIC_P1_A,40,35,8,8
+    RTEXT           "B",IDC_STATIC_P1_B,40,51,8,8
+    EDITTEXT        IDC_CONTROLLER_P1_B,53,48,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P1_A,53,32,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P1_SELECT,54,66,84,12,ES_AUTOHSCROLL | ES_READONLY
+    RTEXT           "Select",IDC_STATIC_P1_SELECT,22,69,26,8
+    RTEXT           "Start",IDC_STATIC_P1_START,29,85,19,8
+    EDITTEXT        IDC_CONTROLLER_P1_START,54,82,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P1_UP,54,99,84,12,ES_AUTOHSCROLL | ES_READONLY
+    RTEXT           "Up",IDC_STATIC_P1_UP,36,103,10,8
+    RTEXT           "Right",IDC_STATIC_P1_RIGHT,28,119,19,8
+    EDITTEXT        IDC_CONTROLLER_P1_RIGHT,54,115,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P1_DOWN,54,132,84,12,ES_AUTOHSCROLL | ES_READONLY
+    RTEXT           "Down",IDC_STATIC_P1_DOWN,27,135,20,8
+    RTEXT           "Left",IDC_STATIC_P1_LEFT,28,151,19,8
+    EDITTEXT        IDC_CONTROLLER_P1_LEFT,54,148,84,12,ES_AUTOHSCROLL | ES_READONLY
+    GROUPBOX        "Controller 2",IDC_STATIC,168,18,129,152
+    RTEXT           "A",IDC_STATIC_P2_A,188,36,8,8
+    RTEXT           "B",IDC_STATIC_P2_B,188,52,8,8
+    EDITTEXT        IDC_CONTROLLER_P2_B,202,49,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P2_A,202,33,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P2_SELECT,202,66,84,12,ES_AUTOHSCROLL | ES_READONLY
+    RTEXT           "Select",IDC_STATIC_P2_SELECT,170,70,26,8
+    RTEXT           "Start",IDC_STATIC_P2_START,178,86,19,8
+    EDITTEXT        IDC_CONTROLLER_P2_START,202,82,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P2_UP,202,100,84,12,ES_AUTOHSCROLL | ES_READONLY
+    RTEXT           "Up",IDC_STATIC_P2_UP,184,103,10,8
+    RTEXT           "Right",IDC_STATIC_P2_RIGHT,176,119,19,8
+    EDITTEXT        IDC_CONTROLLER_P2_RIGHT,202,116,84,12,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_CONTROLLER_P2_DOWN,202,133,84,12,ES_AUTOHSCROLL | ES_READONLY
+    RTEXT           "Down",IDC_STATIC_P2_DOWN,176,135,20,8
+    RTEXT           "Left",IDC_STATIC_P2_LEFT,176,151,19,8
+    EDITTEXT        IDC_CONTROLLER_P2_LEFT,202,149,84,12,ES_AUTOHSCROLL | ES_READONLY
+END
+
+ID_DIALOG_CAPTURE_BINDING DIALOGEX 0, 0, 180, 26
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Set Binding"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    EDITTEXT        IDC_CAPTURE_BINDING_TEXT,7,7,166,12,ES_MULTILINE | ES_READONLY | NOT WS_BORDER
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    ID_DIALOG_CONFIGURE_CONTROLLERS, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 320
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 198
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+ID_DIALOG_CONFIGURE_CONTROLLERS AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+#endif    // English (United States) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

@@ -1,84 +1,52 @@
 #include "Controller.h"
-#include "string.h"
+#include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 
 #define CONTROL_STICK_PRESS_THRESHOLD 8000
-#define MAX_NUMBER_OF_CONTROLLER_BUTTONS 64
 
-typedef struct ControlStickMovement {
-	int stick;
-	int axis;
-	int direction;
-} ControlStickMovement;
+typedef enum { BINDING_NONE, BINDING_KEY, BINDING_PAD_BUTTON, BINDING_STICK } BINDING_TYPE;
 
-// Helper function for the control stick hash function
-static uint64_t mix(uint64_t x) {
-	x ^= x >> 33;
-	x *= 0xff51afd7ed558ccdULL;
-	x ^= x >> 33;
-	return x;
-}
-
-// Hash function to allow us to use ControlStickMovement as a key in the hashmap
-static uint64_t control_stick_movement_hash(const void* key) {
-	const struct ControlStickMovement* k = key;
-	uint64_t h = mix((uint32_t)k->stick);
-	h = mix(h ^ (uint32_t)k->axis);
-	h = mix(h ^ (uint32_t)k->direction);
-	return h;
-}
-
-// Equality function to allow us to use ControlStickMovement as a key in the hashmap
-static int control_stick_movement_eq(const void* a, const void* b) {
-	const struct ControlStickMovement* x = a;
-	const struct ControlStickMovement* y = b;
-	return (x->stick == y->stick && x->axis == y->axis && x->direction == y->direction);
-}
-
-// Hash function to allow us to use SDL_Keycode as a key in the hashmap
-static uint64_t keycode_hash(const void* key) {
-	uint64_t x = (uint32_t) * (const SDL_Keycode*)key;
-	x ^= x >> 33;
-	x *= 0xff51afd7ed558ccdULL;
-	x ^= x >> 33;
-	return x;
-}
-
-// Equality function to allow us to use SDL_Keycode as a key in the hashmap
-static int keycode_eq(const void* a, const void* b) {
-	return *(const SDL_Keycode*)a == *(const SDL_Keycode*)b;
-}
+// The one input that presses an NES button. The same input can be bound to several NES buttons
+typedef struct Binding {
+	BINDING_TYPE type;
+	union {                                    // Only the member matching type is used
+		SDL_Keycode key;
+		SDL_GameControllerButton pad_button;
+		struct {
+			SDL_GameControllerAxis axis;
+			int direction;                     // -1 or 1
+		} stick;
+	};
+} Binding;
 
 struct Controller {
-	Hashmap* bindings;
-	Hashmap* stickBindings;
-	bool buttons_pressed[MAX_NUMBER_OF_CONTROLLER_BUTTONS];
-	SDL_GameControllerButton button_ids[MAX_NUMBER_OF_CONTROLLER_BUTTONS]; // Storage the hashmap values point into
+	Binding bindings[NUMBER_OF_BUTTONS];       // Indexed by CONTROLLER_BUTTON
+	bool buttons_pressed[NUMBER_OF_BUTTONS];
 	SDL_GameController* internalController;
 };
 
+// Helper function: whether a gamepad event came from this controller's own pad, so one pad doesn't drive both players
+static bool isOwnPad(Controller* controller, SDL_JoystickID which) {
+	if (controller->internalController == NULL) { return false; }
+	return which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller->internalController));
+}
+
+// Helper function: replace an NES button's binding
+static void setBinding(Controller* controller, CONTROLLER_BUTTON button, Binding binding) {
+	if (controller == NULL || button < 0 || button >= NUMBER_OF_BUTTONS) { return; }
+	controller->bindings[button] = binding;
+	// If it was held, the old input's release can't reach it any more, so release it now
+	controller->buttons_pressed[button] = false;
+}
+
 // Constructor function for a controller
 Controller* create_controller() {
+	// calloc zeroes everything, so every button starts as BINDING_NONE and not pressed
 	Controller* controller = calloc(1, sizeof(Controller));
 	if (controller == NULL) { return NULL; }
-
-	bool failed_allocation = false;
-	controller->bindings = create_hashmap(128, sizeof(SDL_Keycode), keycode_hash, keycode_eq);
-	if (controller->bindings == NULL) { failed_allocation = true; }
-	controller->stickBindings = create_hashmap(128, sizeof(struct ControlStickMovement), control_stick_movement_hash, control_stick_movement_eq);
-	if (controller->stickBindings == NULL) { failed_allocation = true; }
-
-	if (failed_allocation) {
-		if (controller->bindings != NULL) { hashmap_destroy(controller->bindings); }
-		if (controller->stickBindings != NULL) { hashmap_destroy(controller->stickBindings); }
-		free(controller);
-		return NULL;
-	}
-
-	for (int i = 0; i < MAX_NUMBER_OF_CONTROLLER_BUTTONS; i++) { controller->button_ids[i] = (SDL_GameControllerButton)i; }
 	controller->internalController = NULL;
 	return controller;
 }
@@ -86,113 +54,169 @@ Controller* create_controller() {
 // Destructor function for a controller
 void destroy_controller(Controller* controller) {
 	if (controller == NULL) { return; }
-	hashmap_destroy(controller->bindings);
-	hashmap_destroy(controller->stickBindings);
 	if (controller->internalController != NULL) { SDL_GameControllerClose(controller->internalController); }
 	free(controller);
 }
 
-// Bind a keyboarrd key to an SDL button
+// Bind a keyboarrd key to an NES button
 void controller_bind_key_to_button(Controller* controller, SDL_Keycode key, CONTROLLER_BUTTON button) {
-	if (controller == NULL || button < 0 || button >= MAX_NUMBER_OF_CONTROLLER_BUTTONS) { return; }
-	hashmap_set(controller->bindings, &key, &controller->button_ids[button]);
+	Binding binding = { BINDING_KEY };
+	binding.key = key;
+	setBinding(controller, button, binding);
 }
 
-// Bind a control stick movement to an SDL button
-void controller_bind_stick_to_button(Controller* controller, int from_stick, int from_axis, int from_direction, SDL_GameControllerButton to_button) {
-	if (controller == NULL || to_button < 0 || to_button >= MAX_NUMBER_OF_CONTROLLER_BUTTONS) { return; }
-	ControlStickMovement movement = { from_stick, from_axis, from_direction };
-	hashmap_set(controller->stickBindings, &movement, &controller->button_ids[to_button]);
+// Bind a gamepad button to an NES button
+void controller_bind_pad_button_to_button(Controller* controller, SDL_GameControllerButton pad_button, CONTROLLER_BUTTON button) {
+	if (pad_button < 0 || pad_button >= SDL_CONTROLLER_BUTTON_MAX) { return; }
+	Binding binding = { BINDING_PAD_BUTTON };
+	binding.pad_button = pad_button;
+	setBinding(controller, button, binding);
+}
+
+// Bind a control stick movement to an NES button
+void controller_bind_stick_to_button(Controller* controller, SDL_GameControllerAxis axis, int direction, CONTROLLER_BUTTON button) {
+	if (axis < 0 || axis >= SDL_CONTROLLER_AXIS_MAX) { return; }
+	Binding binding = { BINDING_STICK };
+	binding.stick.axis = axis;
+	binding.stick.direction = (direction < 0) ? -1 : 1;
+	setBinding(controller, button, binding);
+}
+
+bool controller_bind_from_pad_state(Controller* controller, CONTROLLER_BUTTON button) {
+	if (controller == NULL || controller->internalController == NULL) { return false; }
+	SDL_GameController* pad = controller->internalController;
+
+	for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; i++) {
+		if (SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)i)) {
+			controller_bind_pad_button_to_button(controller, (SDL_GameControllerButton)i, button);
+			return true;
+		}
+	}
+	for (int axis = 0; axis < SDL_CONTROLLER_AXIS_MAX; axis++) {
+		int value = SDL_GameControllerGetAxis(pad, (SDL_GameControllerAxis)axis);
+		if (abs(value) >= CONTROL_STICK_PRESS_THRESHOLD) {
+			controller_bind_stick_to_button(controller, (SDL_GameControllerAxis)axis, (value < 0) ? -1 : 1, button);
+			return true;
+		}
+	}
+	return false;
+}
+
+void clearBindings(Controller* controller, CONTROLLER_BUTTON b) {
+	Binding binding = { BINDING_NONE };
+	setBinding(controller, b, binding);
+}
+
+char* getBindingAsString(Controller* controller, CONTROLLER_BUTTON b, char* output, size_t output_len) {
+	if (output == NULL || output_len == 0) { return output; }
+	if (controller == NULL || b < 0 || b >= NUMBER_OF_BUTTONS) {
+		snprintf(output, output_len, "<Unmapped>");
+		return output;
+	}
+
+	const Binding* binding = &controller->bindings[b];
+	switch (binding->type) {
+		case BINDING_KEY:
+			snprintf(output, output_len, "%s", SDL_GetKeyName(binding->key));
+			break;
+		case BINDING_PAD_BUTTON: {
+			const char* name = SDL_GameControllerGetStringForButton(binding->pad_button);
+			if (name != NULL) { snprintf(output, output_len, "%s", name); }
+			else { snprintf(output, output_len, "Button %d", binding->pad_button); }
+			break;
+		}
+		case BINDING_STICK: {
+			// e.g. "leftx+" for the left stick pushed right
+			const char* name = SDL_GameControllerGetStringForAxis(binding->stick.axis);
+			snprintf(output, output_len, "%s%c", (name != NULL) ? name : "axis", (binding->stick.direction < 0) ? '-' : '+');
+			break;
+		}
+		default:
+			snprintf(output, output_len, "<Unmapped>");
+			break;
+	}
+	return output;
 }
 
 // Assigns default bindings for a controller
 void controller_init_default_bindings(Controller* controller) {
-	controller_bind_key_to_button(controller, SDLK_a, SDL_CONTROLLER_BUTTON_Y);
-	controller_bind_key_to_button(controller, SDLK_s, SDL_CONTROLLER_BUTTON_X);
-	controller_bind_key_to_button(controller, SDLK_d, SDL_CONTROLLER_BUTTON_B);
-	controller_bind_key_to_button(controller, SDLK_f, SDL_CONTROLLER_BUTTON_A);
-	controller_bind_key_to_button(controller, SDLK_RETURN, SDL_CONTROLLER_BUTTON_START);
-	controller_bind_key_to_button(controller, SDLK_LSHIFT, SDL_CONTROLLER_BUTTON_BACK);
-	controller_bind_key_to_button(controller, SDLK_UP, SDL_CONTROLLER_BUTTON_DPAD_UP);
-	controller_bind_key_to_button(controller, SDLK_DOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-	controller_bind_key_to_button(controller, SDLK_LEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-	controller_bind_key_to_button(controller, SDLK_RIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+	controller_bind_key_to_button(controller, SDLK_d, BUTTON_B);
+	controller_bind_key_to_button(controller, SDLK_f, BUTTON_A);
+	controller_bind_key_to_button(controller, SDLK_RETURN, BUTTON_START);
+	controller_bind_key_to_button(controller, SDLK_LSHIFT, BUTTON_SELECT);
+	controller_bind_key_to_button(controller, SDLK_UP, BUTTON_UP);
+	controller_bind_key_to_button(controller, SDLK_DOWN, BUTTON_DOWN);
+	controller_bind_key_to_button(controller, SDLK_LEFT, BUTTON_LEFT);
+	controller_bind_key_to_button(controller, SDLK_RIGHT, BUTTON_RIGHT);
 }
 
 // Call once per frame for each controller to handle button presses and update the state accordingly
 void controller_handle_input(Controller* controller, SDL_Event ev) {
 	if (controller == NULL) { return; }
 
-	// Keyboard key pressed
-	if (ev.type == SDL_KEYDOWN) {
-		SDL_GameControllerButton* btn = hashmap_get(controller->bindings, &ev.key.keysym.sym);
-		if (btn != NULL) { controller->buttons_pressed[*btn] = true; }
+	// A gamepad was plugged in. SDL also sends this at startup for pads that are already connected.
+	// Each controller takes the first pad that isn't open yet, so the first pad goes to player 1 and the second to player 2
+	if (ev.type == SDL_CONTROLLERDEVICEADDED) {
+		if (controller->internalController != NULL) { return; }
+		// For this event, which is a device index rather than an instance ID
+		if (SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(ev.cdevice.which)) != NULL) { return; } // The other player has it
+		controller->internalController = SDL_GameControllerOpen(ev.cdevice.which);
+		if (controller->internalController == NULL) { printf("Warning: Could not open gamepad. SDL Error: %s\n", SDL_GetError()); }
+		return;
 	}
 
-	// Keyboard key released
-	else if (ev.type == SDL_KEYUP) {
-		SDL_GameControllerButton* btn = hashmap_get(controller->bindings, &ev.key.keysym.sym);
-		if (btn != NULL) { controller->buttons_pressed[*btn] = false; }
+	// A gamepad was unplugged
+	if (ev.type == SDL_CONTROLLERDEVICEREMOVED) {
+		if (!isOwnPad(controller, ev.cdevice.which)) { return; }
+		SDL_GameControllerClose(controller->internalController);
+		controller->internalController = NULL;
+		// The release events for anything that was held will never arrive, so let go of everything
+		memset(controller->buttons_pressed, 0, sizeof(controller->buttons_pressed));
+		return;
 	}
 
-	// Controller button pressed
-	else if (ev.type == SDL_CONTROLLERBUTTONDOWN) {
-		SDL_GameControllerButton btn = ev.cbutton.button;
-		controller->buttons_pressed[btn] = true;
-	}
-
-	// Controller button released
-	else if (ev.type == SDL_CONTROLLERBUTTONUP) {
-		SDL_GameControllerButton btn = ev.cbutton.button;
-		controller->buttons_pressed[btn] = false;
-	}
-
-	// Control stick to D-Pad mapping
-	else if (ev.type == SDL_CONTROLLERAXISMOTION) {
-		int value = ev.caxis.value;
-		int stick = ev.caxis.which;
-		int axis = ev.caxis.axis;
-		int direction = (value < 0) ? -1 : 1;
-		if (abs(value) >= CONTROL_STICK_PRESS_THRESHOLD) {
-			ControlStickMovement movement = { stick, axis, direction };
-			SDL_GameControllerButton* btn = hashmap_get(controller->stickBindings, &movement);
-			if (btn != NULL) { controller->buttons_pressed[*btn] = true; }
+	// Keyboard key pressed or released
+	if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP) {
+		for (int b = 0; b < NUMBER_OF_BUTTONS; b++) {
+			if (controller->bindings[b].type == BINDING_KEY && controller->bindings[b].key == ev.key.keysym.sym) {
+				controller->buttons_pressed[b] = (ev.type == SDL_KEYDOWN);
+			}
 		}
-		else {
-			// The stick returned to center, so release whatever was bouunud to either direection
-			ControlStickMovement negative = { stick, axis, -1 };
-			ControlStickMovement positive = { stick, axis, 1 };
-			SDL_GameControllerButton* btn = hashmap_get(controller->stickBindings, &negative);
-			if (btn != NULL) { controller->buttons_pressed[*btn] = false; }
-			btn = hashmap_get(controller->stickBindings, &positive);
-			if (btn != NULL) { controller->buttons_pressed[*btn] = false; }
+	}
+
+	// Gamepad button pressed or released
+	else if ((ev.type == SDL_CONTROLLERBUTTONDOWN || ev.type == SDL_CONTROLLERBUTTONUP) && isOwnPad(controller, ev.cbutton.which)) {
+		for (int b = 0; b < NUMBER_OF_BUTTONS; b++) {
+			if (controller->bindings[b].type == BINDING_PAD_BUTTON && controller->bindings[b].pad_button == ev.cbutton.button) {
+				controller->buttons_pressed[b] = (ev.type == SDL_CONTROLLERBUTTONDOWN);
+			}
+		}
+	}
+
+	// Control stick moved. Each NES button bound to this axis is held while the stick is pushed far enough its way
+	else if (ev.type == SDL_CONTROLLERAXISMOTION && isOwnPad(controller, ev.caxis.which)) {
+		int value = ev.caxis.value;
+		for (int b = 0; b < NUMBER_OF_BUTTONS; b++) {
+			const Binding* binding = &controller->bindings[b];
+			if (binding->type == BINDING_STICK && binding->stick.axis == ev.caxis.axis) {
+				controller->buttons_pressed[b] = (value * binding->stick.direction >= CONTROL_STICK_PRESS_THRESHOLD);
+			}
 		}
 	}
 }
 
-bool controller_get_pressed(Controller* controller, SDL_GameControllerButton b) {
-	if (b < 0 || b >= MAX_NUMBER_OF_CONTROLLER_BUTTONS) { return false; }
+bool controller_get_pressed(Controller* controller, CONTROLLER_BUTTON b) {
+	if (controller == NULL || b < 0 || b >= NUMBER_OF_BUTTONS) { return false; }
 	return controller->buttons_pressed[b];
 }
 
 uint8_t controller_get_state_as_byte(Controller* controller) {
 	if (controller == NULL) { return 0; }
 
-	// The SDL button that drives each NES bit, in the order the NES shifts them out
-	static const SDL_GameControllerButton nes_order[8] = {
-		SDL_CONTROLLER_BUTTON_A,
-		SDL_CONTROLLER_BUTTON_B,
-		SDL_CONTROLLER_BUTTON_BACK,
-		SDL_CONTROLLER_BUTTON_START,
-		SDL_CONTROLLER_BUTTON_DPAD_UP,
-		SDL_CONTROLLER_BUTTON_DPAD_DOWN,
-		SDL_CONTROLLER_BUTTON_DPAD_LEFT,
-		SDL_CONTROLLER_BUTTON_DPAD_RIGHT
-	};
-
+	// CONTROLLER_BUTTON is in the order the NES shifts the buttons out, so each button's value is its bit
 	uint8_t state = 0;
-	for (int i = 0; i < 8; i++) {
-		if (controller->buttons_pressed[nes_order[i]]) { state |= (uint8_t)(1 << i); }
+	for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+		if (controller->buttons_pressed[i]) { state |= (uint8_t)(1 << i); }
 	}
 
 	// Opposite D-pad directions should not be preessable at the same time

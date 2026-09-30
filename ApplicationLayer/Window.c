@@ -1,7 +1,10 @@
 #include "Window.h"
+#include "Controller.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/Cartridge.h"
 #include "../EmulationLayer/Savestate.h"
+#include "Dialogs/ConfigControllers.h"
+#include "resource.h"
 #include <stdio.h>
 #include <SDL.h>
 #include <SDL_syswm.h>
@@ -14,6 +17,7 @@
 static SDL_Window* window = NULL;
 static HMENU menuBar = NULL;
 static struct NES_Console* pairedConsole = NULL;
+static Controller* pairedControllers[2] = { NULL, NULL };
 
 enum MENU_IDS {
 	MENU_ID_LOAD_ROM = 1001,
@@ -40,7 +44,7 @@ enum MENU_IDS {
 	MENU_ID_LOAD_SAVESLOT_10,	
 	MENU_ID_LOAD_SAVESLOT_FILE,
 	MENU_ID_FILE_EXIT,
-
+	MENU_ID_CONFIG_CONTROLLERS,
 };
 
 // Helper function to get the HWND from the main SDL window
@@ -58,6 +62,7 @@ static void initMenus() {
 	
 	menuBar = CreateMenu();
 	HMENU fileMenu = CreatePopupMenu();
+	HMENU configMenu = CreatePopupMenu();
 	HMENU saveSavestateMenu = CreatePopupMenu();
 	HMENU loadSavestateMenu = CreatePopupMenu();
 	AppendMenuA(fileMenu, MF_STRING, MENU_ID_LOAD_ROM, "Load ROM...");
@@ -88,7 +93,12 @@ static void initMenus() {
 	AppendMenuA(saveSavestateMenu, MF_STRING, MENU_ID_SAVE_SAVESLOT_FILE, "Save Savestate to File...");
 	AppendMenuA(fileMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuA(fileMenu, MF_STRING, MENU_ID_FILE_EXIT, "Exit");
+
+	AppendMenuA(configMenu, MF_STRING, MENU_ID_CONFIG_CONTROLLERS, "Configure Controllers");
+
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)fileMenu, "File");
+	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)configMenu, "Config");
+
 
 	SetMenu(hwnd, menuBar);
     int w, h;
@@ -165,6 +175,8 @@ static int loadSavestateDialog(HWND owner, char *output, DWORD output_len) {
 static void (*XFunctionPtr)(void) = NULL;
 void setXFunction(void (*funcPtr)(void)) { XFunctionPtr = funcPtr; }
 
+
+
 void handleMenuEvents(SDL_Event e) {
 	switch (e.type) {
 		// X button is pressed
@@ -229,6 +241,9 @@ void handleMenuEvents(SDL_Event e) {
 					case MENU_ID_LOAD_SAVESLOT_6: case MENU_ID_LOAD_SAVESLOT_7: case MENU_ID_LOAD_SAVESLOT_8: case MENU_ID_LOAD_SAVESLOT_9: case MENU_ID_LOAD_SAVESLOT_10:
 						NES_loadSavestateSlot(pairedConsole, LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_LOAD_SAVESLOT_1);
 						break;
+					case MENU_ID_CONFIG_CONTROLLERS:
+						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_CONTROLLERS), getHWND(), (DLGPROC)getConfigControllersDialogProc());
+						break;
 					default:
 						break;
 				}
@@ -241,4 +256,10 @@ void handleMenuEvents(SDL_Event e) {
 
 void pairConsoleToWindow(struct NES_Console *console) {
 	pairedConsole = console;
+}
+
+void pairControllersToWindow(struct Controller* player1, struct Controller* player2) {
+	pairedControllers[0] = player1;
+	pairedControllers[1] = player2;
+	pairControllersToConfigControllersDialog(player1, player2);
 }

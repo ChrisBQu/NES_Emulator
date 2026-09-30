@@ -4,6 +4,10 @@
 #include <SDL.h>
 #include <stdbool.h>
 
+// Declared here so the functions below can take pointers to them without including their headers
+struct NES_Console;
+struct Controller;
+
 // Call once to create a window at the start of the program running
 bool initWindow(const char * screen_name, unsigned short screen_width, unsigned short screen_height);
 
@@ -21,5 +25,8 @@ void handleMenuEvents(SDL_Event e);
 
 // Asssociate a console with the window, so that the menus can access its state
 void pairConsoleToWindow(struct NES_Console* console);
+
+// Associate the two players' controllers with the window, so the controller dialog can show and change their bindings
+void pairControllersToWindow(struct Controller* player1, struct Controller* player2);
 
 #endif
