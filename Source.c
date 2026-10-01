@@ -8,33 +8,22 @@
 #include "EmulationLayer/PPU.h"
 #include "EmulationLayer/APU.h"
 #include "EmulationLayer/Palette.h"
+#include "Screen.h"
 
 bool MAIN = true;
 SDL_Event e;
-SDL_Renderer* screenRenderer;
 int scanline;
 int cycle;
 uint16_t startup_cycles = 0;
 bool startup_ready = false;
 
-// The emulator draws into this buffer one pixel at a time, and it is uploaded to screenTexture once per frame.
-// Pixels are ARGB8888 (0xAARRGGBB), matching the texture format
-#define SCREEN_WIDTH 256
-#define SCREEN_HEIGHT 240
-#define SCREEN_SCALE 2
-#define SCALED_WIDTH (SCREEN_WIDTH * SCREEN_SCALE)
-#define SCALED_HEIGHT (SCREEN_HEIGHT * SCREEN_SCALE)
-uint32_t framebuffer[SCALED_WIDTH * SCALED_HEIGHT];
-SDL_Texture* screenTexture;
+struct Screen *gameScreen = NULL;
 
 // Create a rendering function that will plug into the emulator
-// Each NES pixel fills a block of the framebuffer of a size (SCREEN_SCALE * SCREEN_SCALE)
+// Each NES pixel is one framebuffer pixel; the GPU scales the finished frame up to the window's size
 void receivePixel(struct NES_Pixel pxl) {
     uint32_t color = 0xFF000000u | ((uint32_t)pxl.r << 16) | ((uint32_t)pxl.g << 8) | pxl.b;
-    uint32_t* block = &framebuffer[(pxl.y * SCREEN_SCALE) * SCALED_WIDTH + pxl.x * SCREEN_SCALE];
-    for (int dy = 0; dy < SCREEN_SCALE; dy++) {
-        for (int dx = 0; dx < SCREEN_SCALE; dx++) { block[dy * SCALED_WIDTH + dx] = color; }
-    }
+    gameScreen->framebuffer[pxl.y * gameScreen->width + pxl.x] = color;
     scanline = pxl.y;
     cycle = pxl.x;
 }
@@ -54,7 +43,16 @@ void receiveSample(float sample) {
 
 void quitFunc() { MAIN = false; }
 
+
+
 int main(int arc, char* args[]) {
+
+    // Initialize SDL window and renderer
+    if (!initWindow("NES Emulator", DEFAULT_SCREEN_WIDTH * DEFAULT_SCREEN_SCALE, DEFAULT_SCREEN_HEIGHT * DEFAULT_SCREEN_SCALE)) { return 1; }
+
+
+    gameScreen = createScreen(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
+    if (gameScreen == NULL) { return 1; }
 
     // Initialize ROM and NES
     uint8_t* rom_data = NES_readROMtoBuffer("CV3.nes"); // Or any other legal ROM.
@@ -75,34 +73,11 @@ int main(int arc, char* args[]) {
 
     if (NES_insertCartridge(console, game_cart) == 1) { return 1; }
 
-    // Initialize SDL window and renderer
-    initWindow("NES Emulator", SCALED_WIDTH, SCALED_HEIGHT);
-
-    // Correctly create the renderer
-    int v = SDL_Init(SDL_INIT_VIDEO);
-    screenRenderer = SDL_CreateRenderer(getWindow(), -1, SDL_RENDERER_ACCELERATED);
-    if (screenRenderer == NULL) {
-        printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
-        return -1;
-    }
-    if (!screenRenderer) {
-        printf("Error: SDL_Renderer could not be created! SDL Error: %s\n", SDL_GetError());
-        return -1;
-    }
-
-    // A streaming texture is updated from the CPU every frame
-    screenTexture = SDL_CreateTexture(screenRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCALED_WIDTH, SCALED_HEIGHT);
-    if (screenTexture == NULL) {
-        printf("Error: Screen texture could not be created! SDL Error: %s\n", SDL_GetError());
-        return -1;
-    }
-
     // Set what happens when X is pressed on window
     setXFunction(quitFunc);
 
     // Clear once before the first frame
-    SDL_SetRenderDrawColor(screenRenderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-    SDL_RenderClear(screenRenderer);
+    clearScreen(gameScreen);
 
     // Open an audio device
     SDL_AudioDeviceID audio_device = 0;
@@ -189,16 +164,12 @@ int main(int arc, char* args[]) {
             next_frame_time += frame_ticks;
         }
 
-        // Upload the completed frame and present it
-        SDL_UpdateTexture(screenTexture, NULL, framebuffer, SCALED_WIDTH * sizeof(uint32_t));
-        SDL_RenderCopy(screenRenderer, screenTexture, NULL, NULL);
-        SDL_RenderPresent(screenRenderer);
+        presentFrame(gameScreen);
     }
 
     // Clean up and exit
     if (audio_device != 0) { SDL_CloseAudioDevice(audio_device); }
-    SDL_DestroyTexture(screenTexture);
-    SDL_DestroyRenderer(screenRenderer);
+    destroyScreen(gameScreen);
     exitWindow();
 
     return 0;

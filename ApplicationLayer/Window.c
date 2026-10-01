@@ -1,5 +1,6 @@
 #include "Window.h"
 #include "Controller.h"
+#include "../Screen.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/Cartridge.h"
 #include "../EmulationLayer/Savestate.h"
@@ -45,6 +46,10 @@ enum MENU_IDS {
 	MENU_ID_LOAD_SAVESLOT_FILE,
 	MENU_ID_FILE_EXIT,
 	MENU_ID_CONFIG_CONTROLLERS,
+	MENU_ID_SCALE_1X,
+	MENU_ID_SCALE_2X,
+	MENU_ID_SCALE_3X,
+	MENU_ID_SCALE_4X,
 };
 
 // Helper function to get the HWND from the main SDL window
@@ -65,6 +70,7 @@ static void initMenus() {
 	HMENU configMenu = CreatePopupMenu();
 	HMENU saveSavestateMenu = CreatePopupMenu();
 	HMENU loadSavestateMenu = CreatePopupMenu();
+	HMENU scaleMenu = CreatePopupMenu();
 	AppendMenuA(fileMenu, MF_STRING, MENU_ID_LOAD_ROM, "Load ROM...");
 	AppendMenuA(fileMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuA(fileMenu, MF_POPUP, (UINT_PTR)loadSavestateMenu, "Load Savestate...");
@@ -95,7 +101,11 @@ static void initMenus() {
 	AppendMenuA(fileMenu, MF_STRING, MENU_ID_FILE_EXIT, "Exit");
 
 	AppendMenuA(configMenu, MF_STRING, MENU_ID_CONFIG_CONTROLLERS, "Configure Controllers");
-
+	AppendMenuA(configMenu, MF_POPUP, (UINT_PTR)scaleMenu, "Screen Scale");
+	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_1X, "1x");
+	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_2X, "2x");
+	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_3X, "3x");
+	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_4X, "4x");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)fileMenu, "File");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)configMenu, "Config");
 
@@ -175,8 +185,6 @@ static int loadSavestateDialog(HWND owner, char *output, DWORD output_len) {
 static void (*XFunctionPtr)(void) = NULL;
 void setXFunction(void (*funcPtr)(void)) { XFunctionPtr = funcPtr; }
 
-
-
 void handleMenuEvents(SDL_Event e) {
 	switch (e.type) {
 		// X button is pressed
@@ -243,6 +251,18 @@ void handleMenuEvents(SDL_Event e) {
 						break;
 					case MENU_ID_CONFIG_CONTROLLERS:
 						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_CONTROLLERS), getHWND(), (DLGPROC)getConfigControllersDialogProc());
+						break;
+					case MENU_ID_SCALE_1X:
+						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT); 
+						break;
+					case MENU_ID_SCALE_2X:
+						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * 2, DEFAULT_SCREEN_HEIGHT * 2); 
+						break;
+					case MENU_ID_SCALE_3X:
+						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * 3, DEFAULT_SCREEN_HEIGHT * 3); 
+						break;
+					case MENU_ID_SCALE_4X:
+						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * 4, DEFAULT_SCREEN_HEIGHT * 4); 
 						break;
 					default:
 						break;
