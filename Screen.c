@@ -22,6 +22,9 @@ struct Screen* createScreen(int width, int height) {
         return NULL;
     }
 
+    // Scale the picture to fit the window without changing its shape, centered with black bars filling the leftover space
+    SDL_RenderSetLogicalSize(screen->screenRenderer, width, height);
+
     // A streaming texture is updated from the CPU every frame
     screen->screenTexture = SDL_CreateTexture(screen->screenRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, screen->width, screen->height);
     if (screen->screenTexture == NULL) {
@@ -41,6 +44,7 @@ void clearScreen(struct Screen* screen) {
 void presentFrame(struct Screen* screen) {
     if (screen == NULL) { return; }
     SDL_UpdateTexture(screen->screenTexture, NULL, screen->framebuffer, screen->width * sizeof(uint32_t));
+    clearScreen(screen);
     SDL_RenderCopy(screen->screenRenderer, screen->screenTexture, NULL, NULL);
     SDL_RenderPresent(screen->screenRenderer);
 }

@@ -97,6 +97,13 @@ void Mapper5_writePRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data) {
 	Mapper5_writePRGByte(c, address, data);
 }
 
+// MMC5 keeps its PRG RAM in its own state rather than the cartridge's prg_ram, so the battery save has to come from here
+uint8_t* Mapper5_getSaveRAM(struct Cartridge* c, size_t* size) {
+	struct Mapper5_State* s = c->mapper_state;
+	*size = sizeof(s->prg_ram);
+	return s->prg_ram;
+}
+
 // Translate a PPU address ($0000-$1FFF) into an offset into chr_rom, using the current CHR mode and bank set
 static uint32_t Mapper5_CHROffset(struct Cartridge* c, uint16_t address) {
 	struct Mapper5_State* s = c->mapper_state;

@@ -74,6 +74,10 @@ uint8_t NES_readCartPRG_RAM(struct Cartridge* c, uint16_t address);
 // Write to PRG RAM on a cartridge
 void NES_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data);
 
+// Get the PRG RAM a battery would keep powered, and its size in bytes. Returns NULL (size 0) if there's no cartridge.
+// This doesn't check has_battery, so it works for any game
+uint8_t* NES_getCartSaveRAM(struct Cartridge* c, size_t* size);
+
 // Read CHR ROM from a cartridge
 uint8_t NES_readCartCHR_ROM(struct Cartridge* c, uint16_t address);
 

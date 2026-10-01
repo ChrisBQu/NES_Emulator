@@ -199,6 +199,16 @@ void NES_writeCartPRG_RAM(struct Cartridge* c, uint16_t address, uint8_t data) {
 	}
 }
 
+uint8_t* NES_getCartSaveRAM(struct Cartridge* c, size_t* size) {
+	*size = 0;
+	if (c == NULL || c->mapper >= MAPPER_COUNT) { return NULL; }
+	if (MapperList[c->mapper].getSaveRAM != NULL) {
+		return MapperList[c->mapper].getSaveRAM(c, size);
+	}
+	*size = PRG_RAM_SIZE;
+	return c->prg_ram;
+}
+
 uint8_t NES_readCartCHR_ROM(struct Cartridge* c, uint16_t address) {
 
 	if (c == NULL) {

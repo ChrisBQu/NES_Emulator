@@ -17,6 +17,7 @@
 
 static SDL_Window* window = NULL;
 static HMENU menuBar = NULL;
+static HMENU scaleMenu = NULL;
 static struct NES_Console* pairedConsole = NULL;
 static Controller* pairedControllers[2] = { NULL, NULL };
 
@@ -50,6 +51,7 @@ enum MENU_IDS {
 	MENU_ID_SCALE_2X,
 	MENU_ID_SCALE_3X,
 	MENU_ID_SCALE_4X,
+	MENU_ID_FULLSCREEN,
 };
 
 // Helper function to get the HWND from the main SDL window
@@ -70,7 +72,7 @@ static void initMenus() {
 	HMENU configMenu = CreatePopupMenu();
 	HMENU saveSavestateMenu = CreatePopupMenu();
 	HMENU loadSavestateMenu = CreatePopupMenu();
-	HMENU scaleMenu = CreatePopupMenu();
+	scaleMenu = CreatePopupMenu();
 	AppendMenuA(fileMenu, MF_STRING, MENU_ID_LOAD_ROM, "Load ROM...");
 	AppendMenuA(fileMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuA(fileMenu, MF_POPUP, (UINT_PTR)loadSavestateMenu, "Load Savestate...");
@@ -106,6 +108,8 @@ static void initMenus() {
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_2X, "2x");
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_3X, "3x");
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_4X, "4x");
+	CheckMenuRadioItem(scaleMenu, MENU_ID_SCALE_1X, MENU_ID_SCALE_4X, MENU_ID_SCALE_1X + DEFAULT_SCREEN_SCALE - 1, MF_BYCOMMAND);
+	AppendMenuA(configMenu, MF_STRING, MENU_ID_FULLSCREEN, "Fullscreen\tF11");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)fileMenu, "File");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)configMenu, "Config");
 
@@ -134,6 +138,37 @@ bool initWindow(const char *screen_name, unsigned short screen_w, unsigned short
 	initMenus();
 
 	return true;
+}
+
+static bool isFullscreen = false;
+static int windowedWidth = 0;
+static int windowedHeight = 0;
+
+static void setFullscreen(bool fullscreen) {
+	if (fullscreen == isFullscreen) { return; }
+	isFullscreen = fullscreen;
+	HWND hwnd = getHWND();
+	if (fullscreen) {
+		// Remember the windowed size so it can be restored. The menu bar would take space from the top of the screen, so hide it
+		SDL_GetWindowSize(window, &windowedWidth, &windowedHeight);
+		if (hwnd != NULL) { SetMenu(hwnd, NULL); }
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+		SDL_ShowCursor(SDL_DISABLE);
+	}
+	else {
+		SDL_SetWindowFullscreen(window, 0);
+		if (hwnd != NULL) { SetMenu(hwnd, menuBar); }
+		// Re-adding the menu shrinks the drawable area, so set the size again to get it back
+		SDL_SetWindowSize(window, windowedWidth, windowedHeight);
+		SDL_ShowCursor(SDL_ENABLE);
+	}
+}
+
+// Leaves fullscreen first, so the new window size is applied to the window rather than lost
+static void setWindowScale(int scale) {
+	setFullscreen(false);
+	SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * scale, DEFAULT_SCREEN_HEIGHT * scale);
+	CheckMenuRadioItem(scaleMenu, MENU_ID_SCALE_1X, MENU_ID_SCALE_4X, MENU_ID_SCALE_1X + scale - 1, MF_BYCOMMAND);
 }
 
 SDL_Window* getWindow() {
@@ -253,21 +288,30 @@ void handleMenuEvents(SDL_Event e) {
 						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_CONTROLLERS), getHWND(), (DLGPROC)getConfigControllersDialogProc());
 						break;
 					case MENU_ID_SCALE_1X:
-						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT); 
+						setWindowScale(1);
 						break;
 					case MENU_ID_SCALE_2X:
-						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * 2, DEFAULT_SCREEN_HEIGHT * 2); 
+						setWindowScale(2);
 						break;
 					case MENU_ID_SCALE_3X:
-						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * 3, DEFAULT_SCREEN_HEIGHT * 3); 
+						setWindowScale(3);
 						break;
 					case MENU_ID_SCALE_4X:
-						SDL_SetWindowSize(window, DEFAULT_SCREEN_WIDTH * 4, DEFAULT_SCREEN_HEIGHT * 4); 
+						setWindowScale(4);
+						break;
+					case MENU_ID_FULLSCREEN:
+						setFullscreen(true);
 						break;
 					default:
 						break;
 				}
 			}
+			break;
+		case SDL_KEYDOWN:
+			// F11 toggles fullscreen. Escape also leaves it, since the menu is hidden while fullscreen
+			if (e.key.repeat) { break; }
+			if (e.key.keysym.sym == SDLK_F11) { setFullscreen(!isFullscreen); }
+			else if (e.key.keysym.sym == SDLK_ESCAPE) { setFullscreen(false); }
 			break;
 		default:
 			break;

@@ -56,5 +56,6 @@ void Mapper5_writeExpansion(struct Cartridge* c, uint16_t address, uint8_t data)
 uint8_t Mapper5_readNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram);
 void Mapper5_writeNametable(struct Cartridge* c, uint16_t offset, uint8_t* ciram, uint8_t data);
 void Mapper5_tick(struct Cartridge* c);
+uint8_t* Mapper5_getSaveRAM(struct Cartridge* c, size_t* size);
 
 #endif

@@ -43,6 +43,10 @@ struct Mapper {
 
 	// Ticked once per CPU cycle
 	void (*tick)(struct Cartridge* c);
+
+	// The RAM a battery keeps powered, for mappers that keep their PRG RAM somewhere other than the cartridge's prg_ram.
+	// Sets size to its length in bytes
+	uint8_t* (*getSaveRAM)(struct Cartridge* c, size_t* size);
 };
 
 #define MAPPER_COUNT 6

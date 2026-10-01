@@ -8,6 +8,7 @@
 #include "EmulationLayer/PPU.h"
 #include "EmulationLayer/APU.h"
 #include "EmulationLayer/Palette.h"
+#include "EmulationLayer/BatterySave.h"
 #include "Screen.h"
 
 bool MAIN = true;
@@ -140,6 +141,9 @@ int main(int arc, char* args[]) {
         }
         console->ConnectedPPU->frame_complete = false;
 
+        // Write the game's battery save to disk if it has changed
+        NES_tickBatterySave(console->ConnectedCartridge);
+
         if (audio_device != 0) {
             // Queue this frame's audio, then wait until the sound card has played enough of it to need the next frame
             SDL_QueueAudio(audio_device, audio_buffer, audio_buffer_count * sizeof(float));
@@ -168,6 +172,7 @@ int main(int arc, char* args[]) {
     }
 
     // Clean up and exit
+    NES_writeBatterySave(console->ConnectedCartridge);
     if (audio_device != 0) { SDL_CloseAudioDevice(audio_device); }
     destroyScreen(gameScreen);
     exitWindow();

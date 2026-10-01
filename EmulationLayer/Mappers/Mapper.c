@@ -48,6 +48,7 @@ struct Mapper MapperList[MAPPER_COUNT] = {
 		.notifyPPURegisterWrite = Mapper5_notifyPPURegisterWrite,
 		.readExpansion = Mapper5_readExpansion, .writeExpansion = Mapper5_writeExpansion,
 		.readNametable = Mapper5_readNametable, .writeNametable = Mapper5_writeNametable,
-		.tick = Mapper5_tick
+		.tick = Mapper5_tick,
+		.getSaveRAM = Mapper5_getSaveRAM
 	}
 };

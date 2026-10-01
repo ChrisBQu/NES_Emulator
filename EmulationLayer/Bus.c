@@ -2,6 +2,7 @@
 #include "6502.h"
 #include "PPU.h"
 #include "APU.h"
+#include "BatterySave.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +44,8 @@ int NES_insertCartridge(struct NES_Console *console, struct Cartridge *cart) {
 		printf("Error: The cartridge connected to the bus is a null pointer.\n");
 		return 1;
 	}
-	console->ConnectedCartridge = cart; 
+	NES_loadBatterySave(cart);
+	console->ConnectedCartridge = cart;
 	console->ConnectedProcessor->PC = (NES_readMemory(console, NES_6502_RESET_VECTOR + 1) << 8) | NES_readMemory(console, NES_6502_RESET_VECTOR);
 	//console->ConnectedProcessor->PC = 0xC000; // For testing with nestest.nes, comment out otherwise
 	return 0;
@@ -186,6 +188,7 @@ void NES_busTickMasterClock(struct NES_Console* console, bool startup_ready) {
 
 void NES_removeCartridge(struct NES_Console* console) {
 	if (console->ConnectedCartridge != NULL) {
+		NES_writeBatterySave(console->ConnectedCartridge);
 		NES_freeCartridge(console->ConnectedCartridge);
 		console->ConnectedCartridge = NULL;
 	}
