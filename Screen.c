@@ -41,11 +41,15 @@ void clearScreen(struct Screen* screen) {
     SDL_RenderClear(screen->screenRenderer);
 }
 
-void presentFrame(struct Screen* screen) {
+void drawFrame(struct Screen* screen) {
     if (screen == NULL) { return; }
     SDL_UpdateTexture(screen->screenTexture, NULL, screen->framebuffer, screen->width * sizeof(uint32_t));
     clearScreen(screen);
     SDL_RenderCopy(screen->screenRenderer, screen->screenTexture, NULL, NULL);
+}
+
+void presentFrame(struct Screen* screen) {
+    if (screen == NULL) { return; }
     SDL_RenderPresent(screen->screenRenderer);
 }
 

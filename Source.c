@@ -10,6 +10,7 @@
 #include "EmulationLayer/Palette.h"
 #include "EmulationLayer/BatterySave.h"
 #include "Screen.h"
+#include "Overlay.h"
 
 bool MAIN = true;
 SDL_Event e;
@@ -19,6 +20,7 @@ uint16_t startup_cycles = 0;
 bool startup_ready = false;
 
 struct Screen *gameScreen = NULL;
+struct Overlay *gameOverlay = NULL;
 
 // Create a rendering function that will plug into the emulator
 // Each NES pixel is one framebuffer pixel; the GPU scales the finished frame up to the window's size
@@ -55,6 +57,9 @@ int main(int arc, char* args[]) {
     gameScreen = createScreen(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
     if (gameScreen == NULL) { return 1; }
 
+    gameOverlay = createOverlay();
+    if (gameOverlay == NULL) { return 1; }
+
     // Initialize ROM and NES
     uint8_t* rom_data = NES_readROMtoBuffer("CV3.nes"); // Or any other legal ROM.
     if (rom_data == NULL) { return 1; }
@@ -68,6 +73,7 @@ int main(int arc, char* args[]) {
     if (console == 0) { return 1; }
     pairConsoleToWindow(console);
     pairControllersToWindow(controller_p1, controller_p2);
+    pairOverlayToWindow(gameOverlay);
 
     // Create a function to receive video output from the emulator
     console->imageOutFunc = *receivePixel;
@@ -168,12 +174,15 @@ int main(int arc, char* args[]) {
             next_frame_time += frame_ticks;
         }
 
+        drawFrame(gameScreen);
+        drawOverlay(gameOverlay, gameScreen);
         presentFrame(gameScreen);
     }
 
     // Clean up and exit
     NES_writeBatterySave(console->ConnectedCartridge);
     if (audio_device != 0) { SDL_CloseAudioDevice(audio_device); }
+    destroyOverlay(gameOverlay);
     destroyScreen(gameScreen);
     exitWindow();
 

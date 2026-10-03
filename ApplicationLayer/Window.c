@@ -1,6 +1,7 @@
 #include "Window.h"
 #include "Controller.h"
 #include "../Screen.h"
+#include "../Overlay.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/Cartridge.h"
 #include "../EmulationLayer/Savestate.h"
@@ -20,6 +21,7 @@ static HMENU menuBar = NULL;
 static HMENU scaleMenu = NULL;
 static struct NES_Console* pairedConsole = NULL;
 static Controller* pairedControllers[2] = { NULL, NULL };
+static struct Overlay* pairedOverlay = NULL;
 
 enum MENU_IDS {
 	MENU_ID_LOAD_ROM = 1001,
@@ -254,14 +256,20 @@ void handleMenuEvents(SDL_Event e) {
 						if (XFunctionPtr != NULL) { (*XFunctionPtr)(); }
 						break;
 					case MENU_ID_SAVE_SAVESLOT_1: case MENU_ID_SAVE_SAVESLOT_2: case MENU_ID_SAVE_SAVESLOT_3: case MENU_ID_SAVE_SAVESLOT_4: case MENU_ID_SAVE_SAVESLOT_5:
-					case MENU_ID_SAVE_SAVESLOT_6: case MENU_ID_SAVE_SAVESLOT_7: case MENU_ID_SAVE_SAVESLOT_8: case MENU_ID_SAVE_SAVESLOT_9: case MENU_ID_SAVE_SAVESLOT_10:
-						NES_saveSavestateSlot(pairedConsole, LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_SAVE_SAVESLOT_1);
+					case MENU_ID_SAVE_SAVESLOT_6: case MENU_ID_SAVE_SAVESLOT_7: case MENU_ID_SAVE_SAVESLOT_8: case MENU_ID_SAVE_SAVESLOT_9: case MENU_ID_SAVE_SAVESLOT_10: {
+						int slot = LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_SAVE_SAVESLOT_1;
+						char message[MAX_OVERLAY_TEXT_LENGTH];
+						if (NES_saveSavestateSlot(pairedConsole, slot) == 0) { SDL_snprintf(message, sizeof(message), "Saved to slot %d", slot + 1); }
+						else { SDL_snprintf(message, sizeof(message), "Failed to save to slot %d", slot + 1); }
+						overlayShowMessage(pairedOverlay, message);
 						break;
+					}
 					case MENU_ID_SAVE_SAVESLOT_FILE: {
 						char buffer[MAX_SAVESTATE_FILE_PATH_LENGTH];
 						saveSavestateDialog(getHWND(), buffer, MAX_SAVESTATE_FILE_PATH_LENGTH);
 						if (buffer[0] == '\0') { break; }
-						NES_saveSavestateToFile(pairedConsole, buffer);
+						if (NES_saveSavestateToFile(pairedConsole, buffer) == 0) { overlayShowMessage(pairedOverlay, "Savestate saved"); }
+						else { overlayShowMessage(pairedOverlay, "Failed to save savestate"); }
 						break;
 					}
 					case MENU_ID_LOAD_SAVESLOT_FILE: {
@@ -271,19 +279,29 @@ void handleMenuEvents(SDL_Event e) {
 						struct NES_Savestate* savestate = NES_loadSavestateFromFile(pairedConsole, buffer);
 						if (savestate == NULL) {
 							printf("Error: Failed to load savestate.\n");
+							overlayShowMessage(pairedOverlay, "Failed to load savestate");
 							break;
 						}
 						// Reading the file only builds the savestate. Apply it to the console, then free it either way
-						if (NES_loadSavestate(pairedConsole, savestate) != 0) {
+						if (NES_loadSavestate(pairedConsole, savestate) == 0) {
+							overlayShowMessage(pairedOverlay, "Savestate loaded");
+						}
+						else {
 							printf("Error: Failed to load savestate.\n");
+							overlayShowMessage(pairedOverlay, "Failed to load savestate");
 						}
 						NES_freeSavestate(savestate);
 						break;
 					}
 					case MENU_ID_LOAD_SAVESLOT_1: case MENU_ID_LOAD_SAVESLOT_2: case MENU_ID_LOAD_SAVESLOT_3: case MENU_ID_LOAD_SAVESLOT_4: case MENU_ID_LOAD_SAVESLOT_5:
-					case MENU_ID_LOAD_SAVESLOT_6: case MENU_ID_LOAD_SAVESLOT_7: case MENU_ID_LOAD_SAVESLOT_8: case MENU_ID_LOAD_SAVESLOT_9: case MENU_ID_LOAD_SAVESLOT_10:
-						NES_loadSavestateSlot(pairedConsole, LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_LOAD_SAVESLOT_1);
+					case MENU_ID_LOAD_SAVESLOT_6: case MENU_ID_LOAD_SAVESLOT_7: case MENU_ID_LOAD_SAVESLOT_8: case MENU_ID_LOAD_SAVESLOT_9: case MENU_ID_LOAD_SAVESLOT_10: {
+						int slot = LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_LOAD_SAVESLOT_1;
+						char message[MAX_OVERLAY_TEXT_LENGTH];
+						if (NES_loadSavestateSlot(pairedConsole, slot) == 0) { SDL_snprintf(message, sizeof(message), "Loaded slot %d", slot + 1); }
+						else { SDL_snprintf(message, sizeof(message), "Failed to load slot %d", slot + 1); }
+						overlayShowMessage(pairedOverlay, message);
 						break;
+					}
 					case MENU_ID_CONFIG_CONTROLLERS:
 						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_CONTROLLERS), getHWND(), (DLGPROC)getConfigControllersDialogProc());
 						break;
@@ -326,4 +344,8 @@ void pairControllersToWindow(struct Controller* player1, struct Controller* play
 	pairedControllers[0] = player1;
 	pairedControllers[1] = player2;
 	pairControllersToConfigControllersDialog(player1, player2);
+}
+
+void pairOverlayToWindow(struct Overlay* overlay) {
+	pairedOverlay = overlay;
 }

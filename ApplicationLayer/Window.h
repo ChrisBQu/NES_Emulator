@@ -7,6 +7,7 @@
 // Declared here so the functions below can take pointers to them without including their headers
 struct NES_Console;
 struct Controller;
+struct Overlay;
 
 // Call once to create a window at the start of the program running
 bool initWindow(const char * screen_name, unsigned short screen_width, unsigned short screen_height);
@@ -28,5 +29,8 @@ void pairConsoleToWindow(struct NES_Console* console);
 
 // Associate the two players' controllers with the window, so the controller dialog can show and change their bindings
 void pairControllersToWindow(struct Controller* player1, struct Controller* player2);
+
+// Associate an overlay with the window, so the menus can show messages over the game
+void pairOverlayToWindow(struct Overlay* overlay);
 
 #endif

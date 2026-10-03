@@ -22,6 +22,7 @@ struct Screen {
 struct Screen* createScreen(int width, int height);
 
 void clearScreen(struct Screen* screen);
+void drawFrame(struct Screen* screen);
 void presentFrame(struct Screen* screen);
 void destroyScreen(struct Screen* screen);
 
