@@ -14,6 +14,11 @@
 #define NES_SAVESTATE_FOLDER_LENGTH 64
 #define NES_SAVESTATE_FILENAME_LENGTH 96
 
+// This will be a ring buffer of savestates, so that the history can be rewound to a previous state
+static struct NES_Savestate* save_state_history[SAVE_STATE_HISTORY_SIZE];
+static int save_state_history_cursor = -1; 
+static int save_state_history_count = 0;
+
 // Helper function: the folder and file a slot is stored in, Savestates/<checksum>/<slot>.savestate
 // Slots are numbered from 1 in the file names
 static void getSlotPaths(const struct Cartridge* c, int slot, char* folder, char* filename) {
@@ -43,7 +48,7 @@ int NES_saveSavestateSlot(struct NES_Console* console, int slot) {
     return NES_saveSavestateToFile(console, filename);
 }
 
-// This is not currently used, but it makkes an in-memory savestate
+// Makes an in-memory savestate. The rewind history is built from these
 struct NES_Savestate* NES_createSavestate(struct NES_Console* console) {
     struct NES_Savestate* savestate = malloc(sizeof(struct NES_Savestate));
     if (savestate == NULL) {
@@ -282,4 +287,30 @@ struct NES_Savestate* NES_loadSavestateFromFile(struct NES_Console* console, con
         return NULL;
     }
     return savestate;
+}
+
+void NES_tickHistory(struct NES_Console* console) {
+    struct NES_Savestate* state = NES_createSavestate(console);
+    if (state == NULL) { return; }
+    save_state_history_cursor = (save_state_history_cursor + 1) % SAVE_STATE_HISTORY_SIZE;
+    NES_freeSavestate(save_state_history[save_state_history_cursor]);
+    save_state_history[save_state_history_cursor] = state;
+    if (save_state_history_count < SAVE_STATE_HISTORY_SIZE) { save_state_history_count++; }
+}
+
+void NES_rewindHistory(struct NES_Console* console, int frames) {
+    if (save_state_history_count == 0 || frames < 0) { return; }
+    if (frames > save_state_history_count - 1) { frames = save_state_history_count - 1; }
+    save_state_history_cursor = (save_state_history_cursor - frames + SAVE_STATE_HISTORY_SIZE) % SAVE_STATE_HISTORY_SIZE;
+    save_state_history_count -= frames;
+    NES_loadSavestate(console, save_state_history[save_state_history_cursor]);
+}
+
+void NES_clearHistory(void) {
+    for (int i = 0; i < SAVE_STATE_HISTORY_SIZE; i++) {
+        NES_freeSavestate(save_state_history[i]);
+        save_state_history[i] = NULL;
+    }
+    save_state_history_cursor = -1;
+    save_state_history_count = 0;
 }

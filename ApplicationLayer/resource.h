@@ -38,6 +38,10 @@
 #define IDC_CONTROLLER_P2_LEFT          1032
 #define IDC_CAPTURE_BINDING_TEXT        1033
 #define ID_CONTROLLER_CONFIG_OK         1034
+#define IDC_HOTKEY_REWIND               1035
+#define IDC_STATIC_HOTKEY_REWIND        1036
+#define IDC_HOTKEY_TURBO                1037
+#define IDC_STATIC_HOTKEY_TURBO         1038
 
 // Next default values for new objects
 // 
@@ -45,7 +49,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1035
+#define _APS_NEXT_CONTROL_VALUE         1039
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

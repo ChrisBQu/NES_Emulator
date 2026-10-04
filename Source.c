@@ -9,8 +9,9 @@
 #include "EmulationLayer/APU.h"
 #include "EmulationLayer/Palette.h"
 #include "EmulationLayer/BatterySave.h"
+#include "EmulationLayer/Savestate.h"
 #include "Screen.h"
-#include "Overlay.h"
+#include "ApplicationLayer/Overlay.h"
 
 bool MAIN = true;
 SDL_Event e;
@@ -45,6 +46,9 @@ void receiveSample(float sample) {
 }
 
 void quitFunc() { MAIN = false; }
+
+// NES frames run for each frame shown while the turbo hotkey is held
+#define TURBO_SPEED 4
 
 
 
@@ -121,6 +125,9 @@ int main(int arc, char* args[]) {
     const Uint64 frame_ticks = (Uint64)(perf_frequency / NES_FRAMES_PER_SECOND);
     Uint64 next_frame_time = 0;
 
+    int turbo_message_id = OVERLAY_INVALID_ID;
+    int rewind_message_id = OVERLAY_INVALID_ID;
+
     while (MAIN) {
 
         // Pass the events to places that need them
@@ -129,6 +136,35 @@ int main(int arc, char* args[]) {
             controller_handle_input(controller_p1, e);
             controller_handle_input(controller_p2, e);
         }
+
+        // Catch a turbo request
+        bool turbo = controller_get_pressed(controller_p1, BUTTON_TURBO);
+
+
+        // Catch a rewind request
+        bool rewinding = controller_get_pressed(controller_p1, BUTTON_REWIND) && !turbo;
+        if (rewinding) {
+            NES_rewindHistory(console, 4);
+        }
+
+        // Show the rewind message only while rewinding, the same way as the fast forward message below
+        if (rewinding && rewind_message_id == OVERLAY_INVALID_ID) {
+            rewind_message_id = overlayAddText(gameOverlay, "Rewinding...", 8, 8, OVERLAY_NO_EXPIRY);
+        }
+        else if (!rewinding && rewind_message_id != OVERLAY_INVALID_ID) {
+            overlayRemove(gameOverlay, rewind_message_id);
+            rewind_message_id = OVERLAY_INVALID_ID;
+        }
+
+        // Show the fast forward message only while turbo is held: add it when turbo starts, remove it when it stops
+        if (turbo && turbo_message_id == OVERLAY_INVALID_ID) {
+            turbo_message_id = overlayAddText(gameOverlay, "Fast forwarding...", 8, 8, OVERLAY_NO_EXPIRY);
+        }
+        else if (!turbo && turbo_message_id != OVERLAY_INVALID_ID) {
+            overlayRemove(gameOverlay, turbo_message_id);
+            turbo_message_id = OVERLAY_INVALID_ID;
+        }
+
 
         // Passes the controllers' button states to the controller ports
         NES_setControllerState(console, 0, controller_get_state_as_byte(controller_p1));
@@ -141,14 +177,22 @@ int main(int arc, char* args[]) {
             continue;
         }
 
-        // Run the NES master clock until the PPU has output a full frame
-        while (!console->ConnectedPPU->frame_complete) {
-            NES_busTickMasterClock(console, startup_ready);
-        }
-        console->ConnectedPPU->frame_complete = false;
+        // Turbo runs several NES frames for each one shown, then waits once, so the game runs that many times faster
+        int frames_to_run = turbo ? TURBO_SPEED : 1;
+        for (int f = 0; f < frames_to_run; f++) {
+            audio_buffer_count = 0;
 
-        // Write the game's battery save to disk if it has changed
-        NES_tickBatterySave(console->ConnectedCartridge);
+            // Run the NES master clock until the PPU has output a full frame
+            while (!console->ConnectedPPU->frame_complete) {
+                NES_busTickMasterClock(console, startup_ready);
+            }
+            console->ConnectedPPU->frame_complete = false;
+
+            // Write the game's battery save to disk if it has changed
+            NES_tickBatterySave(console->ConnectedCartridge);
+
+            NES_tickHistory(console);
+        }
 
         if (audio_device != 0) {
             // Queue this frame's audio, then wait until the sound card has played enough of it to need the next frame
@@ -174,6 +218,7 @@ int main(int arc, char* args[]) {
             next_frame_time += frame_ticks;
         }
 
+        // Draw the frame and overlay
         drawFrame(gameScreen);
         drawOverlay(gameOverlay, gameScreen);
         presentFrame(gameScreen);

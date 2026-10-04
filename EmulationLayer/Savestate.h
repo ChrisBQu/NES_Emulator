@@ -5,6 +5,8 @@
 
 #define NES_SAVESTATE_SLOT_COUNT 10
 
+#define SAVE_STATE_HISTORY_SIZE 1800
+
 struct NES_Savestate {
     uint8_t Memory[NES_MEMORY_SIZE];
     struct Cartridge* CartridgeBackup;
@@ -12,6 +14,8 @@ struct NES_Savestate {
 	struct PictureProcessingUnit* PPUBackup;
 	struct AudioProcessingUnit* APUBackup;
 };
+
+
 
 // Save and load savestates to and from a file
 int NES_saveSavestateToFile(struct NES_Console* console, const char* filename);
@@ -29,5 +33,14 @@ int NES_saveSavestateSlot(struct NES_Console* console, int slot);
 
 // Free the memory allocated for the savestate
 void NES_freeSavestate(struct NES_Savestate* savestate);
+
+// Save the cuurrent state of the console to the history
+void NES_tickHistory(struct NES_Console* console);
+
+// Rewind the console to a previous state in the history
+void NES_rewindHistory(struct NES_Console* console, int frames);
+
+// Free every state in the history. Call this when a new game is loaded or the console is reset
+void NES_clearHistory(void);
 
 #endif

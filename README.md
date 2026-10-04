@@ -8,3 +8,5 @@ This is still very much a work in progress. Current features are:
 - Mappers 0 through 5
 - Controller with keyboad/gamepad binding
 - Savestate functionality
+- Battery save functionality
+- Fast forward, and rewind functionality

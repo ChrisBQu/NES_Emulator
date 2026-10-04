@@ -1,7 +1,7 @@
 #include "Window.h"
 #include "Controller.h"
 #include "../Screen.h"
-#include "../Overlay.h"
+#include "Overlay.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/Cartridge.h"
 #include "../EmulationLayer/Savestate.h"

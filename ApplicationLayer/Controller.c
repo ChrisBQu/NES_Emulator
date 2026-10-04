@@ -148,6 +148,8 @@ void controller_init_default_bindings(Controller* controller) {
 	controller_bind_key_to_button(controller, SDLK_DOWN, BUTTON_DOWN);
 	controller_bind_key_to_button(controller, SDLK_LEFT, BUTTON_LEFT);
 	controller_bind_key_to_button(controller, SDLK_RIGHT, BUTTON_RIGHT);
+	controller_bind_key_to_button(controller, SDLK_BACKSPACE, BUTTON_REWIND);
+	controller_bind_key_to_button(controller, SDLK_TAB, BUTTON_TURBO);
 }
 
 // Call once per frame for each controller to handle button presses and update the state accordingly
@@ -215,7 +217,7 @@ uint8_t controller_get_state_as_byte(Controller* controller) {
 
 	// CONTROLLER_BUTTON is in the order the NES shifts the buttons out, so each button's value is its bit
 	uint8_t state = 0;
-	for (int i = 0; i < NUMBER_OF_BUTTONS; i++) {
+	for (int i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
 		if (controller->buttons_pressed[i]) { state |= (uint8_t)(1 << i); }
 	}
 

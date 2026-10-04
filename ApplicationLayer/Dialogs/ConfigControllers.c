@@ -7,20 +7,27 @@
 static Controller* pairedControllers[2] = { NULL, NULL };
 
 // The controller dialog's text box for each NES button, in CONTROLLER_BUTTON order (A, B, Select, Start, Up, Down, Left, Right)
-static const int bindingTextIDs[2][NUMBER_OF_BUTTONS] = {
+static const int bindingTextIDs[2][NUMBER_OF_NES_BUTTONS] = {
 	{ IDC_CONTROLLER_P1_A, IDC_CONTROLLER_P1_B, IDC_CONTROLLER_P1_SELECT, IDC_CONTROLLER_P1_START,
 	  IDC_CONTROLLER_P1_UP, IDC_CONTROLLER_P1_DOWN, IDC_CONTROLLER_P1_LEFT, IDC_CONTROLLER_P1_RIGHT },
 	{ IDC_CONTROLLER_P2_A, IDC_CONTROLLER_P2_B, IDC_CONTROLLER_P2_SELECT, IDC_CONTROLLER_P2_START,
 	  IDC_CONTROLLER_P2_UP, IDC_CONTROLLER_P2_DOWN, IDC_CONTROLLER_P2_LEFT, IDC_CONTROLLER_P2_RIGHT }
 };
 
+// The text box for each hotkey, in CONTROLLER_BUTTON order (Rewind, Turbo). Hotkeys are kept on player 1's controller
+#define NUMBER_OF_HOTKEYS (NUMBER_OF_BUTTONS - NUMBER_OF_NES_BUTTONS)
+static const int hotkeyTextIDs[NUMBER_OF_HOTKEYS] = { IDC_HOTKEY_REWIND, IDC_HOTKEY_TURBO };
+
 // Helper function: fill every text box in the controller dialog with what's bound to its button
 static void showBindings(HWND dlg) {
 	char text[MAX_BINDING_TEXT_LENGTH];
 	for (int player = 0; player < 2; player++) {
-		for (int b = 0; b < NUMBER_OF_BUTTONS; b++) {
+		for (int b = 0; b < NUMBER_OF_NES_BUTTONS; b++) {
 			SetDlgItemTextA(dlg, bindingTextIDs[player][b], getBindingAsString(pairedControllers[player], (CONTROLLER_BUTTON)b, text, sizeof(text)));
 		}
+	}
+	for (int h = 0; h < NUMBER_OF_HOTKEYS; h++) {
+		SetDlgItemTextA(dlg, hotkeyTextIDs[h], getBindingAsString(pairedControllers[0], (CONTROLLER_BUTTON)(NUMBER_OF_NES_BUTTONS + h), text, sizeof(text)));
 	}
 }
 
@@ -163,15 +170,18 @@ static INT_PTR CALLBACK controlsDialogProc(HWND dlg, UINT msg, WPARAM wParam, LP
 	switch (msg) {
 	case WM_INITDIALOG:
 		showBindings(dlg);
-        for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+        for (uint8_t i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
             originalBindingBoxProc = (WNDPROC)SetWindowLongPtr(GetDlgItem(dlg, bindingTextIDs[0][i]), GWLP_WNDPROC, (LONG_PTR)bindingBoxProc);
         }
-        for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+        for (uint8_t i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
             originalBindingBoxProc = (WNDPROC)SetWindowLongPtr(GetDlgItem(dlg, bindingTextIDs[1][i]), GWLP_WNDPROC, (LONG_PTR)bindingBoxProc);
+        }
+        for (uint8_t i = 0; i < NUMBER_OF_HOTKEYS; i++) {
+            originalBindingBoxProc = (WNDPROC)SetWindowLongPtr(GetDlgItem(dlg, hotkeyTextIDs[i]), GWLP_WNDPROC, (LONG_PTR)bindingBoxProc);
         }
 		return TRUE;
 	case WM_APP_BINDING_BOX_CLICKED:
-		for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+		for (uint8_t i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
 			if (wParam == bindingTextIDs[0][i]) {
 				struct BindingRequest request = { pairedControllers[0], (CONTROLLER_BUTTON)i };
 				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request);
@@ -180,9 +190,18 @@ static INT_PTR CALLBACK controlsDialogProc(HWND dlg, UINT msg, WPARAM wParam, LP
 			}
 		}
         // Set on-click handlers for all controller 2 buttons
-		for (uint8_t i = 0; i < NUMBER_OF_BUTTONS; i++) {
+		for (uint8_t i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
 			if (wParam == bindingTextIDs[1][i]) {
 				struct BindingRequest request = { pairedControllers[1], (CONTROLLER_BUTTON)i };
+				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request);
+				showBindings(dlg);
+				break;
+			}
+		}
+		// Hotkeys are bound on player 1's controller
+		for (uint8_t i = 0; i < NUMBER_OF_HOTKEYS; i++) {
+			if (wParam == hotkeyTextIDs[i]) {
+				struct BindingRequest request = { pairedControllers[0], (CONTROLLER_BUTTON)(NUMBER_OF_NES_BUTTONS + i) };
 				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request);
 				showBindings(dlg);
 				break;
