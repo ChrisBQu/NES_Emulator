@@ -2,6 +2,8 @@
 #define SCREEN_H
 
 #include <SDL.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #define DEFAULT_SCREEN_WIDTH 256
 #define DEFAULT_SCREEN_HEIGHT 240
@@ -64,6 +66,11 @@ void presentFrame(struct Screen* screen);
 
 // Choose which shader the game picture is drawn through, from the next frame on
 void setScreenShader(struct Screen* screen, enum ScreenShader shader);
+
+// Get the last frame the NES drew as RGB bytes, top row first, without black bars or the overlay. With applyShader, it's
+// drawn through the current shader at the size it's shown on screen. Without, it's the NES's own 256x240 picture.
+// The size is written into width and height. Returns NULL if it failed. Free the result with free()
+uint8_t* readScreenPixels(struct Screen* screen, bool applyShader, int* width, int* height);
 void destroyScreen(struct Screen* screen);
 
 #endif

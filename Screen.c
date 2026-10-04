@@ -108,6 +108,23 @@ void clearScreen(struct Screen* screen) {
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
+// Helper function: upload the framebuffer and draw it through the current shader into the current viewport,
+// which is pictureWidth x pictureHeight pixels
+static void drawPicture(struct Screen* screen, int pictureWidth, int pictureHeight) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, screen->screenTexture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, screen->width, screen->height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, screen->framebuffer);
+
+    const struct ScreenShaderProgram* shader = &screen->shaders[screen->currentShader];
+    glDisable(GL_BLEND);
+    glUseProgram(shader->program);
+    glUniform1i(shader->uniformTexture, 0);
+    glUniform2f(shader->uniformSourceSize, (float)screen->width, (float)screen->height);
+    glUniform2f(shader->uniformOutputSize, (float)pictureWidth, (float)pictureHeight);
+    glUniform1f(shader->uniformTime, SDL_GetTicks64() / 1000.0f);
+    drawOpenGLQuad();
+}
+
 void drawFrame(struct Screen* screen) {
     if (screen == NULL) { return; }
     clearScreen(screen);
@@ -121,19 +138,71 @@ void drawFrame(struct Screen* screen) {
 
     // OpenGL counts the viewport from the bottom of the window
     glViewport(screen->pictureX, screen->outputHeight - screen->pictureY - screen->pictureHeight, screen->pictureWidth, screen->pictureHeight);
+    drawPicture(screen, screen->pictureWidth, screen->pictureHeight);
+}
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, screen->screenTexture);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, screen->width, screen->height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, screen->framebuffer);
+// Helper function: draw the picture through the current shader into an offscreen texture of the given size, and read it
+// back as RGB. Returns NULL if it failed
+static uint8_t* readShadedPixels(struct Screen* screen, int width, int height) {
+    uint8_t* rgb = malloc((size_t)width * height * 3);
+    if (rgb == NULL) { return NULL; }
 
-    const struct ScreenShaderProgram* shader = &screen->shaders[screen->currentShader];
-    glDisable(GL_BLEND);
-    glUseProgram(shader->program);
-    glUniform1i(shader->uniformTexture, 0);
-    glUniform2f(shader->uniformSourceSize, (float)screen->width, (float)screen->height);
-    glUniform2f(shader->uniformOutputSize, (float)screen->pictureWidth, (float)screen->pictureHeight);
-    glUniform1f(shader->uniformTime, SDL_GetTicks64() / 1000.0f);
-    drawOpenGLQuad();
+    // Draw into a texture instead of the window, so the screenshot has no black bars or overlay
+    GLuint target = createOpenGLTexture(width, height, width * 4, NULL, GL_NEAREST);
+    GLuint framebuffer = 0;
+    glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target, 0);
+
+    bool ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) {
+        glViewport(0, 0, width, height);
+        drawPicture(screen, width, height);
+
+        // OpenGL returns the bottom row first, so read the rows into the buffer from the bottom up
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        for (int row = 0; row < height; row++) {
+            glReadPixels(0, height - 1 - row, width, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb + (size_t)row * width * 3);
+        }
+    }
+
+    // Back to drawing into the window
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &framebuffer);
+    glDeleteTextures(1, &target);
+
+    if (!ok) {
+        printf("Error: Could not draw the screen offscreen.\n");
+        free(rgb);
+        return NULL;
+    }
+    return rgb;
+}
+
+uint8_t* readScreenPixels(struct Screen* screen, bool applyShader, int* width, int* height) {
+    if (screen == NULL || width == NULL || height == NULL) { return NULL; }
+
+    if (applyShader) {
+        // The size the picture is shown at, so the shader looks the same as on screen. Before the first frame is drawn
+        // that isn't known yet, so use the default scale
+        *width = (screen->pictureWidth > 0) ? screen->pictureWidth : screen->width * DEFAULT_SCREEN_SCALE;
+        *height = (screen->pictureHeight > 0) ? screen->pictureHeight : screen->height * DEFAULT_SCREEN_SCALE;
+        return readShadedPixels(screen, *width, *height);
+    }
+
+    // The NES's own picture: the framebuffer is ARGB8888 (0xAARRGGBB), and RGB wants each pixel's red, green and blue bytes in that order
+    *width = screen->width;
+    *height = screen->height;
+    int pixelCount = screen->width * screen->height;
+    uint8_t* rgb = malloc((size_t)pixelCount * 3);
+    if (rgb == NULL) { return NULL; }
+    for (int i = 0; i < pixelCount; i++) {
+        uint32_t pixel = screen->framebuffer[i];
+        rgb[i * 3 + 0] = (uint8_t)(pixel >> 16);
+        rgb[i * 3 + 1] = (uint8_t)(pixel >> 8);
+        rgb[i * 3 + 2] = (uint8_t)pixel;
+    }
+    return rgb;
 }
 
 void setScreenShader(struct Screen* screen, enum ScreenShader shader) {

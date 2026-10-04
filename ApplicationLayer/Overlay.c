@@ -19,6 +19,10 @@
 // Distance between messages and the edge of the game picture, in NES pixels
 #define OVERLAY_MESSAGE_MARGIN 6
 
+// Width of screenshot thumbnails, and of the white border around them, in NES pixels. The height follows the screenshot's shape
+#define OVERLAY_THUMBNAIL_WIDTH 64
+#define OVERLAY_THUMBNAIL_BORDER 1
+
 // Elements fade out over this long before they are removed
 #define OVERLAY_FADE_MS 300
 
@@ -48,6 +52,7 @@ struct Overlay* createOverlay() {
     if (overlay == NULL) { return NULL; }
     overlay->nextId = OVERLAY_INVALID_ID + 1;
     overlay->messageId = OVERLAY_INVALID_ID;
+    overlay->thumbnailId = OVERLAY_INVALID_ID;
 
     // Without a font the emulator still runs, text just isn't shown
     if (TTF_Init() != 0) {
@@ -71,6 +76,7 @@ struct Overlay* createOverlay() {
 
 static void clearElement(struct OverlayElement* element) {
     if (element->texture != 0) { glDeleteTextures(1, &element->texture); }
+    if (element->pixels != NULL) { free(element->pixels); }
     memset(element, 0, sizeof(struct OverlayElement));
 }
 
@@ -98,6 +104,8 @@ static struct OverlayElement* addElement(struct Overlay* overlay, enum OverlayEl
         element->x = x;
         element->y = y;
         element->endTime = (duration_ms == OVERLAY_NO_EXPIRY) ? OVERLAY_NO_EXPIRY : SDL_GetTicks64() + duration_ms;
+        element->opacity = 1.0f;
+        element->layer = OVERLAY_LAYER_MIDDLE;
         return element;
     }
     printf("Warning: Overlay is full, an element was not shown.\n");
@@ -110,6 +118,95 @@ int overlayAddText(struct Overlay* overlay, const char* text, float x, float y, 
     if (element == NULL) { return OVERLAY_INVALID_ID; }
     SDL_strlcpy(element->text, text, MAX_OVERLAY_TEXT_LENGTH);
     return element->id;
+}
+
+// Helper function: add an image element that takes ownership of ARGB8888 pixels. They're freed if it can't be added
+static int addImageElement(struct Overlay* overlay, Uint32* pixels, int pixelWidth, int pixelHeight, float x, float y, float width, float height, Uint32 duration_ms) {
+    struct OverlayElement* element = addElement(overlay, OVERLAY_ELEMENT_IMAGE, x, y, duration_ms);
+    if (element == NULL) {
+        free(pixels);
+        return OVERLAY_INVALID_ID;
+    }
+    element->pixels = pixels;
+    element->pixelWidth = pixelWidth;
+    element->pixelHeight = pixelHeight;
+    element->width = width;
+    element->height = height;
+    return element->id;
+}
+
+int overlayAddImage(struct Overlay* overlay, const uint8_t* rgb, int pixelWidth, int pixelHeight, float x, float y, float width, float height, Uint32 duration_ms) {
+    if (overlay == NULL || rgb == NULL || pixelWidth <= 0 || pixelHeight <= 0) { return OVERLAY_INVALID_ID; }
+
+    // Textures are made while drawing, when OpenGL is ready, so keep a copy of the pixels until then.
+    // They're stored as ARGB8888, the format createOpenGLTexture takes
+    size_t pixelCount = (size_t)pixelWidth * pixelHeight;
+    Uint32* pixels = malloc(pixelCount * sizeof(Uint32));
+    if (pixels == NULL) {
+        printf("Warning: Could not allocate memory for an overlay image.\n");
+        return OVERLAY_INVALID_ID;
+    }
+    for (size_t i = 0; i < pixelCount; i++) {
+        pixels[i] = 0xFF000000u | ((Uint32)rgb[i * 3] << 16) | ((Uint32)rgb[i * 3 + 1] << 8) | rgb[i * 3 + 2];
+    }
+    return addImageElement(overlay, pixels, pixelWidth, pixelHeight, x, y, width, height, duration_ms);
+}
+
+int overlayAddImageARGB(struct Overlay* overlay, const Uint32* argb, int pixelWidth, int pixelHeight, float x, float y, float width, float height, Uint32 duration_ms) {
+    if (overlay == NULL || argb == NULL || pixelWidth <= 0 || pixelHeight <= 0) { return OVERLAY_INVALID_ID; }
+    size_t size = (size_t)pixelWidth * pixelHeight * sizeof(Uint32);
+    Uint32* pixels = malloc(size);
+    if (pixels == NULL) {
+        printf("Warning: Could not allocate memory for an overlay image.\n");
+        return OVERLAY_INVALID_ID;
+    }
+    memcpy(pixels, argb, size);
+    return addImageElement(overlay, pixels, pixelWidth, pixelHeight, x, y, width, height, duration_ms);
+}
+
+// Helper function: find an active element by its id. Returns NULL if there isn't one
+static struct OverlayElement* findElement(struct Overlay* overlay, int id) {
+    if (overlay == NULL || id == OVERLAY_INVALID_ID) { return NULL; }
+    for (int i = 0; i < MAX_OVERLAY_ELEMENTS; i++) {
+        if (overlay->elements[i].active && overlay->elements[i].id == id) { return &overlay->elements[i]; }
+    }
+    return NULL;
+}
+
+void overlaySetBorder(struct Overlay* overlay, int id, float size) {
+    struct OverlayElement* element = findElement(overlay, id);
+    if (element != NULL) { element->borderSize = size; }
+}
+
+void overlaySetOpacity(struct Overlay* overlay, int id, float opacity) {
+    struct OverlayElement* element = findElement(overlay, id);
+    if (element != NULL) { element->opacity = opacity; }
+}
+
+int overlayAddBox(struct Overlay* overlay, float x, float y, float width, float height, float r, float g, float b, float a, Uint32 duration_ms) {
+    if (overlay == NULL) { return OVERLAY_INVALID_ID; }
+    struct OverlayElement* element = addElement(overlay, OVERLAY_ELEMENT_BOX, x, y, duration_ms);
+    if (element == NULL) { return OVERLAY_INVALID_ID; }
+    element->width = width;
+    element->height = height;
+    element->color[0] = r;
+    element->color[1] = g;
+    element->color[2] = b;
+    element->color[3] = a;
+    return element->id;
+}
+
+void overlaySetPosition(struct Overlay* overlay, int id, float x, float y) {
+    struct OverlayElement* element = findElement(overlay, id);
+    if (element == NULL) { return; }
+    element->x = x;
+    element->y = y;
+}
+
+void overlaySetLayer(struct Overlay* overlay, int id, int layer) {
+    struct OverlayElement* element = findElement(overlay, id);
+    if (element == NULL || layer < 0 || layer >= NUMBER_OF_OVERLAY_LAYERS) { return; }
+    element->layer = layer;
 }
 
 void overlayRemove(struct Overlay* overlay, int id) {
@@ -128,6 +225,19 @@ void overlayShowMessage(struct Overlay* overlay, const char* text) {
     float x = OVERLAY_MESSAGE_MARGIN + OVERLAY_TEXT_PADDING;
     float y = DEFAULT_SCREEN_HEIGHT - OVERLAY_MESSAGE_MARGIN - OVERLAY_TEXT_PADDING - OVERLAY_TEXT_HEIGHT;
     overlay->messageId = overlayAddText(overlay, text, x, y, OVERLAY_MESSAGE_DURATION_MS);
+}
+
+void overlayShowThumbnail(struct Overlay* overlay, const uint8_t* rgb, int pixelWidth, int pixelHeight) {
+    if (overlay == NULL || pixelWidth <= 0 || pixelHeight <= 0) { return; }
+    overlayRemove(overlay, overlay->thumbnailId);
+
+    // Keep the screenshot's shape, and leave room for the border inside the margin
+    float width = OVERLAY_THUMBNAIL_WIDTH;
+    float height = width * pixelHeight / pixelWidth;
+    float x = DEFAULT_SCREEN_WIDTH - OVERLAY_MESSAGE_MARGIN - OVERLAY_THUMBNAIL_BORDER - width;
+    float y = DEFAULT_SCREEN_HEIGHT - OVERLAY_MESSAGE_MARGIN - OVERLAY_THUMBNAIL_BORDER - height;
+    overlay->thumbnailId = overlayAddImage(overlay, rgb, pixelWidth, pixelHeight, x, y, width, height, OVERLAY_THUMBNAIL_DURATION_MS);
+    overlaySetBorder(overlay, overlay->thumbnailId, OVERLAY_THUMBNAIL_BORDER);
 }
 
 // Render a text element's texture at the font size that matches the current window scale.
@@ -166,6 +276,23 @@ static bool updateTextTexture(struct Overlay* overlay, struct OverlayElement* el
     return element->texture != 0;
 }
 
+// Build an image element's texture from its pixels the first time it's drawn, then let the pixels go.
+// Returns false if there's nothing to draw
+static bool updateImageTexture(struct OverlayElement* element) {
+    if (element->texture != 0) { return true; }
+    if (element->pixels == NULL) { return false; }
+
+    element->texture = createOpenGLTexture(element->pixelWidth, element->pixelHeight, element->pixelWidth * sizeof(Uint32), element->pixels, GL_LINEAR);
+    // Images are often drawn much smaller than they are (a screenshot as a thumbnail). Smaller copies of the texture
+    // (mipmaps) let OpenGL average the pixels it skips, instead of picking a few and flickering
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+    free(element->pixels);
+    element->pixels = NULL;
+    return element->texture != 0;
+}
+
 // Helper function: set up the overlay's shader and white texture. Returns false if the shader didn't build
 static bool initOverlayOpenGL(struct Overlay* overlay) {
     overlay->shaderProgram = createOpenGLProgram(overlayVertexShader, overlayFragmentShader, "overlay");
@@ -190,6 +317,59 @@ static void drawRect(struct Overlay* overlay, struct Screen* screen, GLuint text
     drawOpenGLQuad();
 }
 
+// Helper function: draw one element. scale is window pixels per NES pixel, and (pictureX, pictureY) is where the game
+// picture's top-left corner is in the window
+static void drawElement(struct Overlay* overlay, struct Screen* screen, struct OverlayElement* element, float scale, float pictureX, float pictureY, Uint64 now) {
+    bool ready = false;
+    switch (element->type) {
+        case OVERLAY_ELEMENT_TEXT:
+            ready = updateTextTexture(overlay, element, scale);
+            break;
+        case OVERLAY_ELEMENT_IMAGE:
+            ready = updateImageTexture(element);
+            break;
+        case OVERLAY_ELEMENT_BOX:
+            // Boxes are the white texture tinted their color
+            ready = true;
+            break;
+    }
+    if (!ready) { return; }
+
+    // Fade out just before being removed
+    float alpha = element->opacity;
+    if (element->endTime != OVERLAY_NO_EXPIRY && element->endTime - now < OVERLAY_FADE_MS) {
+        alpha *= (float)(element->endTime - now) / OVERLAY_FADE_MS;
+    }
+
+    float x = pictureX + element->x * scale;
+    float y = pictureY + element->y * scale;
+    float w = element->width * scale;
+    float h = element->height * scale;
+
+    // Text gets a dark box behind it so it can be read over any background
+    if (element->type == OVERLAY_ELEMENT_TEXT) {
+        float padding = OVERLAY_TEXT_PADDING * scale;
+        float boxAlpha = alpha * OVERLAY_TEXT_BACKGROUND_ALPHA / 255.0f;
+        drawRect(overlay, screen, overlay->whiteTexture, x - padding, y - padding, w + padding * 2, h + padding * 2, 0.0f, 0.0f, 0.0f, boxAlpha);
+    }
+
+    // The border is four strips around the element rather than a box behind it, so it doesn't show through while fading
+    if (element->borderSize > 0.0f) {
+        float border = element->borderSize * scale;
+        drawRect(overlay, screen, overlay->whiteTexture, x - border, y - border, w + border * 2, border, 1.0f, 1.0f, 1.0f, alpha);
+        drawRect(overlay, screen, overlay->whiteTexture, x - border, y + h, w + border * 2, border, 1.0f, 1.0f, 1.0f, alpha);
+        drawRect(overlay, screen, overlay->whiteTexture, x - border, y, border, h, 1.0f, 1.0f, 1.0f, alpha);
+        drawRect(overlay, screen, overlay->whiteTexture, x + w, y, border, h, 1.0f, 1.0f, 1.0f, alpha);
+    }
+
+    if (element->type == OVERLAY_ELEMENT_BOX) {
+        drawRect(overlay, screen, overlay->whiteTexture, x, y, w, h, element->color[0], element->color[1], element->color[2], element->color[3] * alpha);
+    }
+    else {
+        drawRect(overlay, screen, element->texture, x, y, w, h, 1.0f, 1.0f, 1.0f, alpha);
+    }
+}
+
 void drawOverlay(struct Overlay* overlay, struct Screen* screen) {
     if (overlay == NULL || screen == NULL) { return; }
     if (overlay->shaderProgram == 0 && !initOverlayOpenGL(overlay)) { return; }
@@ -207,40 +387,15 @@ void drawOverlay(struct Overlay* overlay, struct Screen* screen) {
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(overlay->uniformTexture, 0);
 
+    // Remove expired elements, then draw what's left a layer at a time
     for (int i = 0; i < MAX_OVERLAY_ELEMENTS; i++) {
         struct OverlayElement* element = &overlay->elements[i];
-        if (!element->active) { continue; }
-        if (element->endTime != OVERLAY_NO_EXPIRY && now >= element->endTime) {
-            clearElement(element);
-            continue;
+        if (element->active && element->endTime != OVERLAY_NO_EXPIRY && now >= element->endTime) { clearElement(element); }
+    }
+    for (int layer = 0; layer < NUMBER_OF_OVERLAY_LAYERS; layer++) {
+        for (int i = 0; i < MAX_OVERLAY_ELEMENTS; i++) {
+            struct OverlayElement* element = &overlay->elements[i];
+            if (element->active && element->layer == layer) { drawElement(overlay, screen, element, scale, pictureX, pictureY, now); }
         }
-
-        bool ready = false;
-        switch (element->type) {
-            case OVERLAY_ELEMENT_TEXT:
-                ready = updateTextTexture(overlay, element, scale);
-                break;
-        }
-        if (!ready) { continue; }
-
-        // Fade out just before being removed
-        float alpha = 1.0f;
-        if (element->endTime != OVERLAY_NO_EXPIRY && element->endTime - now < OVERLAY_FADE_MS) {
-            alpha = (float)(element->endTime - now) / OVERLAY_FADE_MS;
-        }
-
-        float x = pictureX + element->x * scale;
-        float y = pictureY + element->y * scale;
-        float w = element->width * scale;
-        float h = element->height * scale;
-
-        // Text gets a dark box behind it so it can be read over any background
-        if (element->type == OVERLAY_ELEMENT_TEXT) {
-            float padding = OVERLAY_TEXT_PADDING * scale;
-            float boxAlpha = alpha * OVERLAY_TEXT_BACKGROUND_ALPHA / 255.0f;
-            drawRect(overlay, screen, overlay->whiteTexture, x - padding, y - padding, w + padding * 2, h + padding * 2, 0.0f, 0.0f, 0.0f, boxAlpha);
-        }
-
-        drawRect(overlay, screen, element->texture, x, y, w, h, 1.0f, 1.0f, 1.0f, alpha);
     }
 }

@@ -37,7 +37,13 @@
     X(PFNGLBUFFERDATAPROC, glBufferData) \
     X(PFNGLDELETEBUFFERSPROC, glDeleteBuffers) \
     X(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer) \
-    X(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray)
+    X(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray) \
+    X(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffers) \
+    X(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer) \
+    X(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D) \
+    X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus) \
+    X(PFNGLDELETEFRAMEBUFFERSPROC, glDeleteFramebuffers) \
+    X(PFNGLGENERATEMIPMAPPROC, glGenerateMipmap)
 
 #define OPENGL_DECLARE_FUNCTION(type, name) extern type loaded_##name;
 OPENGL_LOADED_FUNCTIONS(OPENGL_DECLARE_FUNCTION)
@@ -72,6 +78,12 @@ OPENGL_LOADED_FUNCTIONS(OPENGL_DECLARE_FUNCTION)
 #define glDeleteBuffers loaded_glDeleteBuffers
 #define glVertexAttribPointer loaded_glVertexAttribPointer
 #define glEnableVertexAttribArray loaded_glEnableVertexAttribArray
+#define glGenFramebuffers loaded_glGenFramebuffers
+#define glBindFramebuffer loaded_glBindFramebuffer
+#define glFramebufferTexture2D loaded_glFramebufferTexture2D
+#define glCheckFramebufferStatus loaded_glCheckFramebufferStatus
+#define glDeleteFramebuffers loaded_glDeleteFramebuffers
+#define glGenerateMipmap loaded_glGenerateMipmap
 
 // Every shader gets its vertices through these inputs: a_position in clip space (-1 to 1), and a_texCoord (0 to 1,
 // with 0 at the top of the image)

@@ -12,6 +12,7 @@
 #include "EmulationLayer/Savestate.h"
 #include "Screen.h"
 #include "ApplicationLayer/Overlay.h"
+#include "ApplicationLayer/Rewind.h"
 
 bool MAIN = true;
 SDL_Event e;
@@ -63,6 +64,9 @@ int main(int arc, char* args[]) {
 
     gameOverlay = createOverlay();
     if (gameOverlay == NULL) { return 1; }
+
+    struct Rewind* gameRewind = createRewind(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
+    if (gameRewind == NULL) { return 1; }
 
     // Initialize ROM and NES
     uint8_t* rom_data = NES_readROMtoBuffer("CV3.nes"); // Or any other legal ROM.
@@ -127,7 +131,6 @@ int main(int arc, char* args[]) {
     Uint64 next_frame_time = 0;
 
     int turbo_message_id = OVERLAY_INVALID_ID;
-    int rewind_message_id = OVERLAY_INVALID_ID;
 
     while (MAIN) {
 
@@ -141,20 +144,18 @@ int main(int arc, char* args[]) {
         // Catch a turbo request
         bool turbo = controller_get_pressed(controller_p1, BUTTON_TURBO);
 
-
-        // Catch a rewind request
-        bool rewinding = controller_get_pressed(controller_p1, BUTTON_REWIND) && !turbo;
-        if (rewinding) {
-            NES_rewindHistory(console, 4);
+        // Holding rewind pauses the game and shows a strip of thumbnails of the last 30 seconds. Left and right move a cursor
+        // along it, frame by frame, and the screen shows that frame. Letting go carries on from there
+        bool rewind_held = controller_get_pressed(controller_p1, BUTTON_REWIND);
+        if (rewind_held && !gameRewind->active && !turbo && startup_ready) {
+            rewindBegin(gameRewind, gameScreen, gameOverlay);
         }
-
-        // Show the rewind message only while rewinding, the same way as the fast forward message below
-        if (rewinding && rewind_message_id == OVERLAY_INVALID_ID) {
-            rewind_message_id = overlayAddText(gameOverlay, "Rewinding...", 8, 8, OVERLAY_NO_EXPIRY);
+        else if (!rewind_held && gameRewind->active) {
+            rewindEnd(gameRewind, gameScreen, gameOverlay, console);
         }
-        else if (!rewinding && rewind_message_id != OVERLAY_INVALID_ID) {
-            overlayRemove(gameOverlay, rewind_message_id);
-            rewind_message_id = OVERLAY_INVALID_ID;
+        if (gameRewind->active) {
+            rewindUpdate(gameRewind, gameScreen, gameOverlay, console, controller_get_pressed(controller_p1, BUTTON_LEFT), controller_get_pressed(controller_p1, BUTTON_RIGHT));
+            turbo = false;
         }
 
         // Show the fast forward message only while turbo is held: add it when turbo starts, remove it when it stops
@@ -178,6 +179,15 @@ int main(int arc, char* args[]) {
             continue;
         }
 
+        // The game is paused while rewinding. Keep drawing the preview and thumbnails, at about the NES's frame rate
+        if (gameRewind->active) {
+            drawFrame(gameScreen);
+            drawOverlay(gameOverlay, gameScreen);
+            presentFrame(gameScreen);
+            SDL_Delay(16);
+            continue;
+        }
+
         // Turbo runs several NES frames for each one shown, then waits once, so the game runs that many times faster
         int frames_to_run = turbo ? TURBO_SPEED : 1;
         for (int f = 0; f < frames_to_run; f++) {
@@ -193,6 +203,7 @@ int main(int arc, char* args[]) {
             NES_tickBatterySave(console->ConnectedCartridge);
 
             NES_tickHistory(console);
+            rewindTickFrame(gameRewind, gameScreen);
         }
 
         if (audio_device != 0) {
@@ -228,6 +239,7 @@ int main(int arc, char* args[]) {
     // Clean up and exit
     NES_writeBatterySave(console->ConnectedCartridge);
     if (audio_device != 0) { SDL_CloseAudioDevice(audio_device); }
+    destroyRewind(gameRewind);
     destroyOverlay(gameOverlay);
     destroyScreen(gameScreen);
     exitWindow();

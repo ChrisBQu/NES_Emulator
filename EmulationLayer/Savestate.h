@@ -46,8 +46,15 @@ void NES_freeSavestate(struct NES_Savestate* savestate);
 // Save the cuurrent state of the console to the history
 void NES_tickHistory(struct NES_Console* console);
 
-// Rewind the console to a previous state in the history
+// Rewind the console to the state from this many frames ago. Everything in the history after it is discarded
 void NES_rewindHistory(struct NES_Console* console, int frames);
+
+// Load the state from this many frames ago, but keep the history as it is, so it can still go forward again.
+// Returns 0 on success, or 1 if the history doesn't go back that far
+int NES_loadHistoryState(struct NES_Console* console, int frames);
+
+// How many frames of history there are. NES_rewindHistory can go back at most one less than this
+int NES_getHistoryLength(void);
 
 // Free every state in the history. Call this when a new game is loaded or the console is reset
 void NES_clearHistory(void);

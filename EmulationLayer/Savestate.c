@@ -317,6 +317,16 @@ void NES_rewindHistory(struct NES_Console* console, int frames) {
     NES_loadSavestate(console, save_state_history[save_state_history_cursor]);
 }
 
+int NES_loadHistoryState(struct NES_Console* console, int frames) {
+    if (frames < 0 || frames >= save_state_history_count) { return 1; }
+    int index = (save_state_history_cursor - frames + SAVE_STATE_HISTORY_SIZE) % SAVE_STATE_HISTORY_SIZE;
+    return NES_loadSavestate(console, save_state_history[index]);
+}
+
+int NES_getHistoryLength(void) {
+    return save_state_history_count;
+}
+
 void NES_clearHistory(void) {
     for (int i = 0; i < SAVE_STATE_HISTORY_SIZE; i++) {
         NES_freeSavestate(save_state_history[i]);

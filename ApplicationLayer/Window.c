@@ -2,6 +2,7 @@
 #include "Controller.h"
 #include "../Screen.h"
 #include "Overlay.h"
+#include "Screenshot.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/Cartridge.h"
 #include "../EmulationLayer/Savestate.h"
@@ -58,6 +59,7 @@ enum MENU_IDS {
 	MENU_ID_SCALE_4X,
 	MENU_ID_FULLSCREEN,
 	MENU_ID_CRT_FILTER,
+	MENU_ID_SCREENSHOT,
 };
 
 // Helper function to get the HWND from the main SDL window
@@ -119,6 +121,10 @@ static void initMenus() {
 	AppendMenuA(configMenu, MF_STRING, MENU_ID_CRT_FILTER, "CRT Filter");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)fileMenu, "File");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)configMenu, "Config");
+
+	HMENU miscMenu = CreatePopupMenu();
+	AppendMenuA(miscMenu, MF_STRING, MENU_ID_SCREENSHOT, "Take Screenshot\tF12");
+	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)miscMenu, "Misc");
 
 
 	SetMenu(hwnd, menuBar);
@@ -230,6 +236,22 @@ static int loadSavestateDialog(HWND owner, char *output, DWORD output_len) {
 	return GetOpenFileNameA(&filename);
 }
 
+// Save a screenshot, with the CRT filter if it's on, and show a thumbnail of it (or say it failed) on screen
+static void screenshot() {
+	int width, height;
+	uint8_t* rgb = readScreenPixels(pairedScreen, crtFilterEnabled, &width, &height);
+	char path[MAX_SCREENSHOT_PATH_LENGTH];
+	if (rgb != NULL && saveScreenshot(rgb, width, height, path, sizeof(path))) {
+		printf("Screenshot saved: %s\n", path);
+		overlayShowMessage(pairedOverlay, "Screenshot saved");
+		overlayShowThumbnail(pairedOverlay, rgb, width, height);
+	}
+	else {
+		overlayShowMessage(pairedOverlay, "Failed to save screenshot");
+	}
+	free(rgb);
+}
+
 static void (*XFunctionPtr)(void) = NULL;
 void setXFunction(void (*funcPtr)(void)) { XFunctionPtr = funcPtr; }
 
@@ -337,6 +359,9 @@ void handleMenuEvents(SDL_Event e) {
 						setScreenShader(pairedScreen, crtFilterEnabled ? SCREEN_SHADER_CRT : SCREEN_SHADER_NORMAL);
 						CheckMenuItem(configMenu, MENU_ID_CRT_FILTER, MF_BYCOMMAND | (crtFilterEnabled ? MF_CHECKED : MF_UNCHECKED));
 						break;
+					case MENU_ID_SCREENSHOT:
+						screenshot();
+						break;
 					default:
 						break;
 				}
@@ -347,6 +372,7 @@ void handleMenuEvents(SDL_Event e) {
 			if (e.key.repeat) { break; }
 			if (e.key.keysym.sym == SDLK_F11) { setFullscreen(!isFullscreen); }
 			else if (e.key.keysym.sym == SDLK_ESCAPE) { setFullscreen(false); }
+			else if (e.key.keysym.sym == SDLK_F12) { screenshot(); }
 			break;
 		default:
 			break;
