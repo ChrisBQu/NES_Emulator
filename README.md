@@ -10,3 +10,4 @@ This is still very much a work in progress. Current features are:
 - Savestate functionality
 - Battery save functionality
 - Fast forward, and rewind functionality
+- CRT filter (courtesy of Timothy Lottes)

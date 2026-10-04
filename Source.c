@@ -54,7 +54,7 @@ void quitFunc() { MAIN = false; }
 
 int main(int arc, char* args[]) {
 
-    // Initialize SDL window and renderer
+    // Initialize SDL window and OpenGL
     if (!initWindow("NES Emulator", DEFAULT_SCREEN_WIDTH * DEFAULT_SCREEN_SCALE, DEFAULT_SCREEN_HEIGHT * DEFAULT_SCREEN_SCALE)) { return 1; }
 
 
@@ -78,6 +78,7 @@ int main(int arc, char* args[]) {
     pairConsoleToWindow(console);
     pairControllersToWindow(controller_p1, controller_p2);
     pairOverlayToWindow(gameOverlay);
+    pairScreenToWindow(gameScreen);
 
     // Create a function to receive video output from the emulator
     console->imageOutFunc = *receivePixel;

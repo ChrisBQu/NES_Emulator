@@ -24,7 +24,7 @@ enum OverlayElementType {
 };
 
 // Something drawn on top of the game: a texture, where to put it, and how long to keep it.
-// The texture is built while drawing, since that's when the renderer and window size are known
+// The texture is built while drawing, since that's when the window size is known
 struct OverlayElement {
     bool active;
     int id;
@@ -39,7 +39,8 @@ struct OverlayElement {
     // SDL_GetTicks64() time when the element is removed, or OVERLAY_NO_EXPIRY to keep it
     Uint64 endTime;
 
-    SDL_Texture* texture;
+    // OpenGL texture name (a GLuint), or 0 if it hasn't been built yet
+    unsigned int texture;
 
     // Text elements are rendered at the window's real resolution so they stay sharp,
     // so the texture is rebuilt whenever the font size needed for the window changes
@@ -57,6 +58,13 @@ struct Overlay {
     // The element showing the latest message, so a new message can replace it
     int messageId;
     struct OverlayElement elements[MAX_OVERLAY_ELEMENTS];
+
+    // The overlay's own shader, separate from the screen shader so screen effects don't apply to it. It draws a texture
+    // multiplied by a color. Solid boxes use a plain white texture. Created on the first draw, once OpenGL is running
+    unsigned int shaderProgram;
+    int uniformTexture;
+    int uniformColor;
+    unsigned int whiteTexture;
 };
 
 struct Overlay* createOverlay();

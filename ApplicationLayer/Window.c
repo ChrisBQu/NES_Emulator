@@ -22,6 +22,9 @@ static HMENU scaleMenu = NULL;
 static struct NES_Console* pairedConsole = NULL;
 static Controller* pairedControllers[2] = { NULL, NULL };
 static struct Overlay* pairedOverlay = NULL;
+static struct Screen* pairedScreen = NULL;
+static HMENU configMenu = NULL;
+static bool crtFilterEnabled = false;
 
 enum MENU_IDS {
 	MENU_ID_LOAD_ROM = 1001,
@@ -54,6 +57,7 @@ enum MENU_IDS {
 	MENU_ID_SCALE_3X,
 	MENU_ID_SCALE_4X,
 	MENU_ID_FULLSCREEN,
+	MENU_ID_CRT_FILTER,
 };
 
 // Helper function to get the HWND from the main SDL window
@@ -71,7 +75,7 @@ static void initMenus() {
 	
 	menuBar = CreateMenu();
 	HMENU fileMenu = CreatePopupMenu();
-	HMENU configMenu = CreatePopupMenu();
+	configMenu = CreatePopupMenu();
 	HMENU saveSavestateMenu = CreatePopupMenu();
 	HMENU loadSavestateMenu = CreatePopupMenu();
 	scaleMenu = CreatePopupMenu();
@@ -112,6 +116,7 @@ static void initMenus() {
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_4X, "4x");
 	CheckMenuRadioItem(scaleMenu, MENU_ID_SCALE_1X, MENU_ID_SCALE_4X, MENU_ID_SCALE_1X + DEFAULT_SCREEN_SCALE - 1, MF_BYCOMMAND);
 	AppendMenuA(configMenu, MF_STRING, MENU_ID_FULLSCREEN, "Fullscreen\tF11");
+	AppendMenuA(configMenu, MF_STRING, MENU_ID_CRT_FILTER, "CRT Filter");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)fileMenu, "File");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)configMenu, "Config");
 
@@ -130,8 +135,14 @@ bool initWindow(const char *screen_name, unsigned short screen_w, unsigned short
 		printf("SDL could not be initialized.");
 		return false;
 	}
+	// The screen draws with OpenGL 3.3 shaders. These have to be set before the window is created
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
 	// Attempt to create the window, and bail if it doesn't work
-	window = SDL_CreateWindow(screen_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screen_w, screen_h, SDL_WINDOW_SHOWN);
+	window = SDL_CreateWindow(screen_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screen_w, screen_h, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
 	if (window == NULL) {
 		printf("Error: Window could not be created.");
 		return false;
@@ -320,6 +331,11 @@ void handleMenuEvents(SDL_Event e) {
 					case MENU_ID_FULLSCREEN:
 						setFullscreen(true);
 						break;
+					case MENU_ID_CRT_FILTER:
+						crtFilterEnabled = !crtFilterEnabled;
+						setScreenShader(pairedScreen, crtFilterEnabled ? SCREEN_SHADER_CRT : SCREEN_SHADER_NORMAL);
+						CheckMenuItem(configMenu, MENU_ID_CRT_FILTER, MF_BYCOMMAND | (crtFilterEnabled ? MF_CHECKED : MF_UNCHECKED));
+						break;
 					default:
 						break;
 				}
@@ -348,4 +364,8 @@ void pairControllersToWindow(struct Controller* player1, struct Controller* play
 
 void pairOverlayToWindow(struct Overlay* overlay) {
 	pairedOverlay = overlay;
+}
+
+void pairScreenToWindow(struct Screen* screen) {
+	pairedScreen = screen;
 }

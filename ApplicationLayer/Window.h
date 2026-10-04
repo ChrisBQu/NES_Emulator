@@ -8,6 +8,7 @@
 struct NES_Console;
 struct Controller;
 struct Overlay;
+struct Screen;
 
 // Call once to create a window at the start of the program running
 bool initWindow(const char * screen_name, unsigned short screen_width, unsigned short screen_height);
@@ -32,5 +33,8 @@ void pairControllersToWindow(struct Controller* player1, struct Controller* play
 
 // Associate an overlay with the window, so the menus can show messages over the game
 void pairOverlayToWindow(struct Overlay* overlay);
+
+// Associate the screen with the window, so the menus can change its shader
+void pairScreenToWindow(struct Screen* screen);
 
 #endif
