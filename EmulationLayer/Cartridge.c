@@ -336,6 +336,71 @@ struct Cartridge* NES_copyCartridge(const struct Cartridge* c) {
 	return copy;
 }
 
+struct Cartridge* NES_copyCartridgeState(const struct Cartridge* c) {
+	if (c == NULL) { return NULL; }
+
+	struct Cartridge* copy = malloc(sizeof(struct Cartridge));
+	if (copy == NULL) {
+		printf("Error: Could not copy cartridge state. Out of memory?\n");
+		return NULL;
+	}
+
+	// Copy all the plain fields, then clear the pointers. The ROM is never copied, since it can't change
+	*copy = *c;
+	copy->prg_rom = NULL;
+	copy->chr_rom = NULL;
+	copy->prg_ram = NULL;
+	copy->mapper_state = NULL;
+
+	size_t prg_rom_size, chr_rom_size, mapper_state_size;
+	getBlockSizes(c, &prg_rom_size, &chr_rom_size, &mapper_state_size);
+
+	// Boards without CHR ROM use the chr_rom block as CHR RAM, which does change
+	bool has_chr_ram = (c->chr_rom_blocks == 0);
+	if (has_chr_ram) { copy->chr_rom = copyBlock(c->chr_rom, chr_rom_size); }
+	copy->prg_ram = copyBlock(c->prg_ram, PRG_RAM_SIZE);
+	copy->mapper_state = copyBlock(c->mapper_state, mapper_state_size);
+
+	// A block that should exist but came back NULL means an allocation failed
+	if ((has_chr_ram && c->chr_rom != NULL && copy->chr_rom == NULL) ||
+		(c->prg_ram != NULL && copy->prg_ram == NULL) ||
+		(c->mapper_state != NULL && copy->mapper_state == NULL)) {
+		printf("Error: Could not copy cartridge state. Out of memory?\n");
+		NES_freeCartridge(copy);
+		return NULL;
+	}
+
+	return copy;
+}
+
+int NES_restoreCartridgeState(struct Cartridge* target, const struct Cartridge* state) {
+	if (target == NULL || state == NULL) { return 1; }
+	if (state->checksum != target->checksum || state->mapper != target->mapper) {
+		printf("Error: This state was made with a different game.\n");
+		return 1;
+	}
+
+	size_t prg_rom_size, chr_rom_size, mapper_state_size;
+	getBlockSizes(target, &prg_rom_size, &chr_rom_size, &mapper_state_size);
+
+	// Take the state's plain fields, but keep the running cartridge's own memory blocks
+	uint8_t* prg_rom = target->prg_rom;
+	uint8_t* chr_rom = target->chr_rom;
+	uint8_t* prg_ram = target->prg_ram;
+	void* mapper_state = target->mapper_state;
+	*target = *state;
+	target->prg_rom = prg_rom;
+	target->chr_rom = chr_rom;
+	target->prg_ram = prg_ram;
+	target->mapper_state = mapper_state;
+
+	// Then copy the state's contents into those blocks
+	if (prg_ram != NULL && state->prg_ram != NULL) { memcpy(prg_ram, state->prg_ram, PRG_RAM_SIZE); }
+	if (target->chr_rom_blocks == 0 && chr_rom != NULL && state->chr_rom != NULL) { memcpy(chr_rom, state->chr_rom, chr_rom_size); }
+	if (mapper_state != NULL && state->mapper_state != NULL) { memcpy(mapper_state, state->mapper_state, mapper_state_size); }
+	return 0;
+}
+
 // Helper function: continue a CRC32 over a block of memory. This only runs when a savestate is saved or loaded, so the simple bitwise version is fast enough
 static uint32_t crc32Update(uint32_t crc, const uint8_t* data, size_t size) {
 	crc = ~crc;
@@ -406,8 +471,8 @@ struct Cartridge* NES_readCartridgeState(const struct Cartridge* rom, FILE* f) {
 		return NULL;
 	}
 
-	// Start from a copy of the running game, so the ROM comes from there, then replace everything that changes as the game runs
-	struct Cartridge* c = NES_copyCartridge(rom);
+	// Start from a state-only copy of the running game, then replace everything that changes as the game runs
+	struct Cartridge* c = NES_copyCartridgeState(rom);
 	if (c == NULL) { return NULL; }
 	c->nametable_mirroring = (SCROLL_MAPPING_TYPE)header.nametable_mirroring;
 	c->irq_asserted = header.irq_asserted != 0;

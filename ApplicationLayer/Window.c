@@ -254,6 +254,7 @@ void handleMenuEvents(SDL_Event e) {
 							break;
 						}
 						NES_resetConsoleState(pairedConsole);
+						NES_clearHistory();
 						struct Cartridge* game_cart = NES_createCartridgeFromBuffer(rom_data);
 						free(rom_data);
 						if (NES_insertCartridge(pairedConsole, game_cart) == 1) {

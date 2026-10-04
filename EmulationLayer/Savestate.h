@@ -7,8 +7,17 @@
 
 #define SAVE_STATE_HISTORY_SIZE 1800
 
+// The parts of the console's Memory array the bus actually uses: the 2KB of CPU RAM, and $4000-$401F, where accesses
+// the bus doesn't hand to the APU or controllers land. The rest of the array is never touched, so it isn't kept
+#define NES_SAVESTATE_RAM_SIZE 0x800
+#define NES_SAVESTATE_IO_START 0x4000
+#define NES_SAVESTATE_IO_SIZE 0x20
+
 struct NES_Savestate {
-    uint8_t Memory[NES_MEMORY_SIZE];
+    uint8_t RAM[NES_SAVESTATE_RAM_SIZE];
+    uint8_t IOArea[NES_SAVESTATE_IO_SIZE];
+    // Only the parts of the cartridge that change as the game runs (see NES_copyCartridgeState). The ROM comes from
+    // the running game when the state is loaded
     struct Cartridge* CartridgeBackup;
 	struct Processor* ProcessorBackup;
 	struct PictureProcessingUnit* PPUBackup;

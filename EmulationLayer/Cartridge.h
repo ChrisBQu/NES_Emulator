@@ -110,12 +110,23 @@ void NES_tickCart(struct Cartridge* c);
 // Make a deep copy of a cartridge, including its ROM, RAM and mapper state. Free it with NES_freeCartridge
 struct Cartridge* NES_copyCartridge(const struct Cartridge* c);
 
+// Copy only the parts of a cartridge that change as the game runs: PRG RAM, CHR RAM (on boards without CHR ROM), mapper state
+// and the plain fields. The copy has no ROM, so it can't be run. It's for putting back with NES_restoreCartridgeState.
+// Free it with NES_freeCartridge
+struct Cartridge* NES_copyCartridgeState(const struct Cartridge* c);
+
+// Put a state made by NES_copyCartridgeState back into a running cartridge. The running cartridge keeps its own ROM and
+// memory blocks, and the state's contents are copied into them. Returns 0 on success, or 1 (changing nothing) if the
+// state is from a different game
+int NES_restoreCartridgeState(struct Cartridge* target, const struct Cartridge* state);
+
 // Write the parts of a cartridge that change as the game runs (RAM, mapper state) to an open file. The ROM is never written,
 // only a checksum identifying the game. Returns 0 on success
 int NES_writeCartridgeState(const struct Cartridge* c, FILE* f);
 
-// Read state written by NES_writeCartridgeState, and combine it with the ROM of rom (the game that's running) into a new cartridge.
-// Returns NULL if the state is from a different game, or is truncated or invalid. Free it with NES_freeCartridge
+// Read state written by NES_writeCartridgeState into a state-only cartridge, like NES_copyCartridgeState makes. rom is the
+// game that's running, which the state is checked against. Returns NULL if the state is from a different game, or is
+// truncated or invalid. Put it back with NES_restoreCartridgeState, and free it with NES_freeCartridge
 struct Cartridge* NES_readCartridgeState(const struct Cartridge* rom, FILE* f);
 
 // Free the memory associated with a cartridge

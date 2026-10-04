@@ -48,6 +48,16 @@ int NES_saveSavestateSlot(struct NES_Console* console, int slot) {
     return NES_saveSavestateToFile(console, filename);
 }
 
+// Helper functions: copy the parts of a 64KB memory array the bus uses into a savestate, and back
+static void keepUsedMemory(struct NES_Savestate* savestate, const uint8_t* memory) {
+    memcpy(savestate->RAM, memory, NES_SAVESTATE_RAM_SIZE);
+    memcpy(savestate->IOArea, memory + NES_SAVESTATE_IO_START, NES_SAVESTATE_IO_SIZE);
+}
+static void restoreUsedMemory(const struct NES_Savestate* savestate, uint8_t* memory) {
+    memcpy(memory, savestate->RAM, NES_SAVESTATE_RAM_SIZE);
+    memcpy(memory + NES_SAVESTATE_IO_START, savestate->IOArea, NES_SAVESTATE_IO_SIZE);
+}
+
 // Makes an in-memory savestate. The rewind history is built from these
 struct NES_Savestate* NES_createSavestate(struct NES_Console* console) {
     struct NES_Savestate* savestate = malloc(sizeof(struct NES_Savestate));
@@ -57,7 +67,7 @@ struct NES_Savestate* NES_createSavestate(struct NES_Console* console) {
     }
 
     // Copy the memory state
-    memcpy(savestate->Memory, console->Memory, NES_MEMORY_SIZE);
+    keepUsedMemory(savestate, console->Memory);
 
     // Copy the processsor state
     struct Processor* newProcessor = malloc(sizeof(struct Processor));
@@ -92,10 +102,10 @@ struct NES_Savestate* NES_createSavestate(struct NES_Console* console) {
     *newAPU = *console->ConnectedAPU;
     savestate->APUBackup = newAPU;
 
-    // Copy the cartridge state (the console may be running without a cartridge inserted)
+    // Copy the parts of the cartridge that change, not its ROM
     savestate->CartridgeBackup = NULL;
     if (console->ConnectedCartridge != NULL) {
-        savestate->CartridgeBackup = NES_copyCartridge(console->ConnectedCartridge);
+        savestate->CartridgeBackup = NES_copyCartridgeState(console->ConnectedCartridge);
         if (savestate->CartridgeBackup == NULL) {
             printf("Failed to allocate memory for Cartridge state copy\n");
             free(savestate);
@@ -144,18 +154,18 @@ int NES_loadSavestate(struct NES_Console* console, struct NES_Savestate* savesta
         return 1;
     }
 
-    // Copy the cartridge first, since it's the only step that can fail. If it does, the console is left untouched
-    struct Cartridge* restoredCartridge = NULL;
+    // Restore the cartridge first, since it's the only step that can fail. If it does, the console is left untouched.
+    // The savestate doesn't hold the ROM, so it's put back into the game that's running, which has to be the same game
     if (savestate->CartridgeBackup != NULL) {
-        restoredCartridge = NES_copyCartridge(savestate->CartridgeBackup);
-        if (restoredCartridge == NULL) {
-            printf("Failed to allocate memory for Cartridge state restore\n");
+        if (console->ConnectedCartridge == NULL) {
+            printf("Load the game this savestate was made with first\n");
             return 1;
         }
+        if (NES_restoreCartridgeState(console->ConnectedCartridge, savestate->CartridgeBackup) != 0) { return 1; }
     }
 
     // Restore the memory state
-    memcpy(console->Memory, savestate->Memory, NES_MEMORY_SIZE);
+    restoreUsedMemory(savestate, console->Memory);
 
     // Restore the processor, PPU and APU states
     *console->ConnectedProcessor = *savestate->ProcessorBackup;
@@ -164,10 +174,6 @@ int NES_loadSavestate(struct NES_Console* console, struct NES_Savestate* savesta
     console->ConnectedProcessor->bus = console;
     console->ConnectedPPU->bus = console;
     console->ConnectedAPU->bus = console;
-
-    // Swap in the restored cartridge
-    NES_freeCartridge(console->ConnectedCartridge);
-    console->ConnectedCartridge = restoredCartridge;
 
     return 0;
 }
@@ -270,8 +276,13 @@ struct NES_Savestate* NES_loadSavestateFromFile(struct NES_Console* console, con
     savestate->PPUBackup = malloc(sizeof(struct PictureProcessingUnit));
     savestate->APUBackup = malloc(sizeof(struct AudioProcessingUnit));
 
-    bool ok = savestate->ProcessorBackup != NULL && savestate->PPUBackup != NULL && savestate->APUBackup != NULL
-        && fread(savestate->Memory, NES_MEMORY_SIZE, 1, f) == 1
+    // Files hold the whole 64KB memory array, so older savestate files keep working. Only the parts the bus uses are kept
+    uint8_t* memory = malloc(NES_MEMORY_SIZE);
+    bool ok = memory != NULL && fread(memory, NES_MEMORY_SIZE, 1, f) == 1;
+    if (ok) { keepUsedMemory(savestate, memory); }
+    free(memory);
+
+    ok = ok && savestate->ProcessorBackup != NULL && savestate->PPUBackup != NULL && savestate->APUBackup != NULL
         && fread(savestate->ProcessorBackup, sizeof(struct Processor), 1, f) == 1
         && fread(savestate->PPUBackup, sizeof(struct PictureProcessingUnit), 1, f) == 1
         && fread(savestate->APUBackup, sizeof(struct AudioProcessingUnit), 1, f) == 1;
