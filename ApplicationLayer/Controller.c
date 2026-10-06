@@ -138,6 +138,42 @@ char* getBindingAsString(Controller* controller, CONTROLLER_BUTTON b, char* outp
 	return output;
 }
 
+bool controller_bind_from_string(Controller* controller, const char* name, CONTROLLER_BUTTON b) {
+	if (controller == NULL || name == NULL) { return false; }
+
+	if (strcmp(name, "<Unmapped>") == 0) {
+		clearBindings(controller, b);
+		return true;
+	}
+
+	// Gamepad button names are lowercase ("a", "dpup"), and compared exactly so they aren't mistaken for key names ("A")
+	for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; i++) {
+		const char* padName = SDL_GameControllerGetStringForButton((SDL_GameControllerButton)i);
+		if (padName != NULL && strcmp(name, padName) == 0) {
+			controller_bind_pad_button_to_button(controller, (SDL_GameControllerButton)i, b);
+			return true;
+		}
+	}
+
+	// A stick direction is the axis name followed by + or - (e.g. "leftx+")
+	size_t length = strlen(name);
+	if (length >= 2 && (name[length - 1] == '+' || name[length - 1] == '-')) {
+		for (int axis = 0; axis < SDL_CONTROLLER_AXIS_MAX; axis++) {
+			const char* axisName = SDL_GameControllerGetStringForAxis((SDL_GameControllerAxis)axis);
+			if (axisName != NULL && strlen(axisName) == length - 1 && strncmp(name, axisName, length - 1) == 0) {
+				controller_bind_stick_to_button(controller, (SDL_GameControllerAxis)axis, (name[length - 1] == '-') ? -1 : 1, b);
+				return true;
+			}
+		}
+	}
+
+	// Otherwise it should be a key name
+	SDL_Keycode key = SDL_GetKeyFromName(name);
+	if (key == SDLK_UNKNOWN) { return false; }
+	controller_bind_key_to_button(controller, key, b);
+	return true;
+}
+
 // Assigns default bindings for a controller
 void controller_init_default_bindings(Controller* controller) {
 	controller_bind_key_to_button(controller, SDLK_d, BUTTON_B);

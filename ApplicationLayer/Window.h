@@ -22,19 +22,14 @@ SDL_Window* getWindow();
 // Set the function to be executed if the user presses the X button of the window
 void setXFunction(void (*funcPtr)(void));
 
+// Set the menu items' check marks to match the application state's options. The menus are built before the
+// application state exists, so call this once it's been created
+void updateMenusFromApplicationState();
+
+// Turn the CRT filter on or off, and update the menu's check mark to match. Doesn't save the config file
+void setCrtFilterEnabled(bool enabled);
+
 // Can be called once per frame to handle events where the user interactss with the menu
 void handleMenuEvents(SDL_Event e);
-
-// Asssociate a console with the window, so that the menus can access its state
-void pairConsoleToWindow(struct NES_Console* console);
-
-// Associate the two players' controllers with the window, so the controller dialog can show and change their bindings
-void pairControllersToWindow(struct Controller* player1, struct Controller* player2);
-
-// Associate an overlay with the window, so the menus can show messages over the game
-void pairOverlayToWindow(struct Overlay* overlay);
-
-// Associate the screen with the window, so the menus can change its shader
-void pairScreenToWindow(struct Screen* screen);
 
 #endif

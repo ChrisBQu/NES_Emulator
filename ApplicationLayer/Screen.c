@@ -1,6 +1,6 @@
 #include "Screen.h"
-#include "ApplicationLayer/Window.h"
-#include "ApplicationLayer/OpenGL.h"
+#include "Window.h"
+#include "OpenGL.h"
 #include <math.h>
 
 #define SHADER_PATH_LENGTH 1024
@@ -57,6 +57,11 @@ static bool loadScreenShader(struct ScreenShaderProgram* shader, const char* fra
     shader->uniformSourceSize = glGetUniformLocation(program, "u_sourceSize");
     shader->uniformOutputSize = glGetUniformLocation(program, "u_outputSize");
     shader->uniformTime = glGetUniformLocation(program, "u_time");
+    shader->uniformHardScan = glGetUniformLocation(program, "hardScan");
+    shader->uniformHardPix = glGetUniformLocation(program, "hardPix");
+    shader->uniformWarp = glGetUniformLocation(program, "warp");
+    shader->uniformMaskDark = glGetUniformLocation(program, "maskDark");
+    shader->uniformMaskLight = glGetUniformLocation(program, "maskLight");
     return true;
 }
 
@@ -122,6 +127,11 @@ static void drawPicture(struct Screen* screen, int pictureWidth, int pictureHeig
     glUniform2f(shader->uniformSourceSize, (float)screen->width, (float)screen->height);
     glUniform2f(shader->uniformOutputSize, (float)pictureWidth, (float)pictureHeight);
     glUniform1f(shader->uniformTime, SDL_GetTicks64() / 1000.0f);
+    glUniform1f(shader->uniformHardScan, screen->crtSettings.hardScan);
+    glUniform1f(shader->uniformHardPix, screen->crtSettings.hardPix);
+    glUniform2f(shader->uniformWarp, screen->crtSettings.warpH, screen->crtSettings.warpV);
+    glUniform1f(shader->uniformMaskDark, screen->crtSettings.maskDark);
+    glUniform1f(shader->uniformMaskLight, screen->crtSettings.maskLight);
     drawOpenGLQuad();
 }
 
@@ -208,6 +218,11 @@ uint8_t* readScreenPixels(struct Screen* screen, bool applyShader, int* width, i
 void setScreenShader(struct Screen* screen, enum ScreenShader shader) {
     if (screen == NULL || shader < 0 || shader >= NUMBER_OF_SCREEN_SHADERS) { return; }
     screen->currentShader = shader;
+}
+
+void setCrtSettings(struct Screen* screen, const struct CrtSettings* settings) {
+    if (screen == NULL || settings == NULL) { return; }
+    screen->crtSettings = *settings;
 }
 
 void presentFrame(struct Screen* screen) {

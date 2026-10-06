@@ -1,6 +1,6 @@
 #include "Rewind.h"
 #include "Overlay.h"
-#include "../Screen.h"
+#include "Screen.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/PPU.h"
 #include <stdio.h>

@@ -103,13 +103,14 @@ uint8_t hashmap_remove(Hashmap *map, void *key) {
     return 1;
 }
 
-// Destroy the hashmap, freeeing the memory
-uint8_t hashmap_destroy(Hashmap *map) {
+// Destroy the hashmap, freeeing the memory. If free_value is not NULL, it's called on every value
+uint8_t hashmap_destroy(Hashmap *map, Hashmap_free_fn free_value) {
     if (map == NULL) { return 1; } // Sanity check
     for (size_t i = 0; i < map->bucket_count; i++) {
         struct HashmapNode *current_node = map->buckets[i];
         while (current_node != NULL) {
             struct HashmapNode *next_node = current_node->next;
+            if (free_value != NULL) { free_value(current_node->value); }
             free(current_node->key);
             free(current_node);
             current_node = next_node;

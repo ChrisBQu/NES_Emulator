@@ -1,10 +1,17 @@
 #include "ConfigControllers.h"
+#include <stdio.h>
+
+#include "../Application.h"
 #include "../Controller.h"
 #include "../resource.h"
 
 #define MAX_BINDING_TEXT_LENGTH 128
 
-static Controller* pairedControllers[2] = { NULL, NULL };
+// Helper function: get a player's controller (0 or 1) from the application state
+static Controller* getPlayerController(int player) {
+	struct ApplicationState* appState = getGlobalApplicationState();
+	return player == 0 ? appState->controller_p1 : appState->controller_p2;
+}
 
 // The controller dialog's text box for each NES button, in CONTROLLER_BUTTON order (A, B, Select, Start, Up, Down, Left, Right)
 static const int bindingTextIDs[2][NUMBER_OF_NES_BUTTONS] = {
@@ -23,11 +30,11 @@ static void showBindings(HWND dlg) {
 	char text[MAX_BINDING_TEXT_LENGTH];
 	for (int player = 0; player < 2; player++) {
 		for (int b = 0; b < NUMBER_OF_NES_BUTTONS; b++) {
-			SetDlgItemTextA(dlg, bindingTextIDs[player][b], getBindingAsString(pairedControllers[player], (CONTROLLER_BUTTON)b, text, sizeof(text)));
+			SetDlgItemTextA(dlg, bindingTextIDs[player][b], getBindingAsString(getPlayerController(player),(CONTROLLER_BUTTON)b, text, sizeof(text)));
 		}
 	}
 	for (int h = 0; h < NUMBER_OF_HOTKEYS; h++) {
-		SetDlgItemTextA(dlg, hotkeyTextIDs[h], getBindingAsString(pairedControllers[0], (CONTROLLER_BUTTON)(NUMBER_OF_NES_BUTTONS + h), text, sizeof(text)));
+		SetDlgItemTextA(dlg, hotkeyTextIDs[h], getBindingAsString(getPlayerController(0),(CONTROLLER_BUTTON)(NUMBER_OF_NES_BUTTONS + h), text, sizeof(text)));
 	}
 }
 
@@ -130,7 +137,6 @@ static INT_PTR CALLBACK captureBindingDialogProc(HWND dlg, UINT msg, WPARAM wPar
 			request = (struct BindingRequest*)lParam;
 			SetWindowLongPtr(dlg, DWLP_USER, (LONG_PTR)request);
 
-			char current[MAX_BINDING_TEXT_LENGTH];
 			char prompt[MAX_BINDING_TEXT_LENGTH * 2];
 			snprintf(prompt, sizeof(prompt), "Press a key or button.");
 			HWND box = GetDlgItem(dlg, IDC_CAPTURE_BINDING_TEXT);
@@ -183,8 +189,10 @@ static INT_PTR CALLBACK controlsDialogProc(HWND dlg, UINT msg, WPARAM wParam, LP
 	case WM_APP_BINDING_BOX_CLICKED:
 		for (uint8_t i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
 			if (wParam == bindingTextIDs[0][i]) {
-				struct BindingRequest request = { pairedControllers[0], (CONTROLLER_BUTTON)i };
-				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request);
+				struct BindingRequest request = { getPlayerController(0), (CONTROLLER_BUTTON)i };
+				if (DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request) == IDOK) {
+					saveApplicationOptions(getGlobalApplicationState());
+				}
 				showBindings(dlg);
 				break;
 			}
@@ -192,8 +200,10 @@ static INT_PTR CALLBACK controlsDialogProc(HWND dlg, UINT msg, WPARAM wParam, LP
         // Set on-click handlers for all controller 2 buttons
 		for (uint8_t i = 0; i < NUMBER_OF_NES_BUTTONS; i++) {
 			if (wParam == bindingTextIDs[1][i]) {
-				struct BindingRequest request = { pairedControllers[1], (CONTROLLER_BUTTON)i };
-				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request);
+				struct BindingRequest request = { getPlayerController(1), (CONTROLLER_BUTTON)i };
+				if (DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request) == IDOK) {
+					saveApplicationOptions(getGlobalApplicationState());
+				}
 				showBindings(dlg);
 				break;
 			}
@@ -201,8 +211,10 @@ static INT_PTR CALLBACK controlsDialogProc(HWND dlg, UINT msg, WPARAM wParam, LP
 		// Hotkeys are bound on player 1's controller
 		for (uint8_t i = 0; i < NUMBER_OF_HOTKEYS; i++) {
 			if (wParam == hotkeyTextIDs[i]) {
-				struct BindingRequest request = { pairedControllers[0], (CONTROLLER_BUTTON)(NUMBER_OF_NES_BUTTONS + i) };
-				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request);
+				struct BindingRequest request = { getPlayerController(0), (CONTROLLER_BUTTON)(NUMBER_OF_NES_BUTTONS + i) };
+				if (DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CAPTURE_BINDING), dlg, captureBindingDialogProc, (LPARAM)&request) == IDOK) {
+					saveApplicationOptions(getGlobalApplicationState());
+				}
 				showBindings(dlg);
 				break;
 			}
@@ -224,10 +236,4 @@ static INT_PTR CALLBACK controlsDialogProc(HWND dlg, UINT msg, WPARAM wParam, LP
 // Exposed function to get the dialog procedure
 DLGPROC getConfigControllersDialogProc() {
 	return controlsDialogProc;
-}
-
-// Receive the controllers to pair to the dialog
-void pairControllersToConfigControllersDialog(Controller* player1, Controller* player2) {
-	pairedControllers[0] = player1;
-	pairedControllers[1] = player2;
 }

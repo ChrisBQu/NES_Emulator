@@ -44,10 +44,14 @@ struct NES_Console {
 // Must be called once to create the Console object
 struct NES_Console* NES_initConsole();
 
+// Frees the console, all of its components, and the inserted cartridge (if any). Safe to call with NULL.
+void NES_freeConsole(struct NES_Console* console);
+
 // Connect a cartridge to the console. This function also places the Program Counter at the Reset vector
 int NES_insertCartridge(struct NES_Console* console, struct Cartridge* cart);
 
-// Removes a cartridge from the console, and frees the memory associated with it. Also resets thhe state of the console.
+// Removes a cartridge from the console, writing its battery save and freeing the memory associated with it.
+// Use NES_resetConsoleState to also reset the rest of the console
 void NES_removeCartridge(struct NES_Console* console);
 
 // Send out one clock tick. This will advance both the CPU and the PPU appropriately

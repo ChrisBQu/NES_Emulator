@@ -5,6 +5,5 @@
 #include "../Controller.h"
 
 DLGPROC getConfigControllersDialogProc();
-void pairControllersToConfigControllersDialog(Controller* player1, Controller* player2);
 
 #endif

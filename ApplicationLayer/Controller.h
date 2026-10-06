@@ -45,6 +45,11 @@ void clearBindings(Controller* controller, CONTROLLER_BUTTON b);
 // Write the name of what's bound to an NES button into output (e.g. "F", "dpup" or "leftx+"), or "<Unmapped>" if nothing is.
 // Returns output, so it can be used directly as an argument
 char* getBindingAsString(Controller* controller, CONTROLLER_BUTTON b, char* output, size_t output_len);
+
+// The reverse of getBindingAsString: bind whatever the name describes to an NES button. "<Unmapped>" clears the binding.
+// Lowercase gamepad button names ("a") are read as gamepad buttons, so a key needs its key name ("A").
+// Returns false if the name isn't recognised, leaving the binding as it was
+bool controller_bind_from_string(Controller* controller, const char* name, CONTROLLER_BUTTON b);
 void controller_handle_input(Controller *controller, SDL_Event event);
 
 bool controller_get_pressed(Controller* controller, CONTROLLER_BUTTON b);

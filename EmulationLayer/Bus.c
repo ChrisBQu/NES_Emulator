@@ -8,34 +8,56 @@
 #include <string.h>
 
 // Constructor
+// The console is zeroed so every component pointer starts as NULL. If any part fails to initialize,
+// NES_freeConsole can then safely free whichever parts were already created
 struct NES_Console* NES_initConsole() {
-	struct NES_Console* console = malloc(sizeof(struct NES_Console));
+	struct NES_Console* console = calloc(1, sizeof(struct NES_Console));
 	if (console == NULL) {
 		printf("Error: Could not create NES Console object. Out of memory?\n");
-		return 0;
+		return NULL;
 	}
 
 	console->ConnectedProcessor = NES_6502_initProcessor();
-	if (console->ConnectedProcessor == NULL) { return 0; }
+	if (console->ConnectedProcessor == NULL) { 
+		NES_freeConsole(console); 
+		return NULL; 
+	}
 	console->ConnectedProcessor->bus = console;
 
 	console->ConnectedPPU = NES_initPPU();
-	if (console->ConnectedPPU == NULL) { return 0; }
+	if (console->ConnectedPPU == NULL) { 
+		NES_freeConsole(console); 
+		return NULL; 
+	}
 	console->ConnectedPPU->bus = console;
 
 	console->ConnectedAPU = NES_initAPU();
-	if (console->ConnectedAPU == NULL) { return 0; }
+	if (console->ConnectedAPU == NULL) { 
+		NES_freeConsole(console); 
+		return NULL; 
+	}
 	console->ConnectedAPU->bus = console;
 
 	console->ConnectedControllerPort = NES_initControllerPort();
-	if (console->ConnectedControllerPort == NULL) { return 0; }
+	if (console->ConnectedControllerPort == NULL) { 
+		NES_freeConsole(console); 
+		return NULL; 
+	}
+	
 	console->ConnectedControllerPort->bus = console;
 
-	console->ConnectedCartridge = NULL;
-	console->imageOutFunc = NULL;
-	console->audioOutFunc = NULL;
-	memset(console->Memory, 0, 0x10000);
 	return console;
+}
+
+// Destructor. Frees the console, its components, and any inserted cartridge. The battery save is not written here
+void NES_freeConsole(struct NES_Console* console) {
+	if (console == NULL) { return; }
+	NES_freeCartridge(console->ConnectedCartridge);
+	free(console->ConnectedProcessor);
+	free(console->ConnectedPPU);
+	free(console->ConnectedAPU);
+	free(console->ConnectedControllerPort);
+	free(console);
 }
 
 // Connect cartridge to the BUS, which will enable memory reading. Also adjust the program counter to the start of code from the cartridge
@@ -192,7 +214,6 @@ void NES_removeCartridge(struct NES_Console* console) {
 		NES_freeCartridge(console->ConnectedCartridge);
 		console->ConnectedCartridge = NULL;
 	}
-	console->ConnectedProcessor->PC = (NES_readMemory(console, NES_6502_RESET_VECTOR + 1) << 8) | NES_readMemory(console, NES_6502_RESET_VECTOR);
 }
 
 void NES_resetConsoleState(struct NES_Console* console) {

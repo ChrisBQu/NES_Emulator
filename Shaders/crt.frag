@@ -19,6 +19,7 @@
 //     resolution, v_texCoord for fragCoord / iResolution)
 //   - Only the full CRT effect is kept. The original's three-panel comparison and the bars between them are removed
 //   - Fetch samples the middle of each NES pixel, so nearest-neighbor filtering can't land on a neighbor
+//   - The settings below are uniforms, set from the config file, instead of constants
 //
 
 in vec2 v_texCoord;
@@ -34,21 +35,21 @@ uniform vec2 u_sourceSize;
 // Hardness of scanline.
 //  -8.0 = soft
 // -16.0 = medium
-float hardScan=-8.0;
+uniform float hardScan;
 
 // Hardness of pixels in scanline.
 // -2.0 = soft
 // -4.0 = hard
-float hardPix=-3.0;
+uniform float hardPix;
 
-// Display warp.
+// Display warp. x is the horizontal warp, y is the vertical warp.
 // 0.0 = none
 // 1.0/8.0 = extreme
-vec2 warp=vec2(1.0/32.0,1.0/24.0);
+uniform vec2 warp;
 
 // Amount of shadow mask.
-float maskDark=0.5;
-float maskLight=1.5;
+uniform float maskDark;
+uniform float maskLight;
 
 //------------------------------------------------------------------------
 

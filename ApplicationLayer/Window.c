@@ -1,12 +1,15 @@
 #include "Window.h"
+#include "Application.h"
 #include "Controller.h"
-#include "../Screen.h"
+#include "Screen.h"
 #include "Overlay.h"
 #include "Screenshot.h"
 #include "../EmulationLayer/Bus.h"
 #include "../EmulationLayer/Cartridge.h"
 #include "../EmulationLayer/Savestate.h"
 #include "Dialogs/ConfigControllers.h"
+#include "Dialogs/ConfigCrt.h"
+#include "Dialogs/ConfigSound.h"
 #include "resource.h"
 #include <stdio.h>
 #include <SDL.h>
@@ -20,12 +23,7 @@
 static SDL_Window* window = NULL;
 static HMENU menuBar = NULL;
 static HMENU scaleMenu = NULL;
-static struct NES_Console* pairedConsole = NULL;
-static Controller* pairedControllers[2] = { NULL, NULL };
-static struct Overlay* pairedOverlay = NULL;
-static struct Screen* pairedScreen = NULL;
 static HMENU configMenu = NULL;
-static bool crtFilterEnabled = false;
 
 enum MENU_IDS {
 	MENU_ID_LOAD_ROM = 1001,
@@ -58,7 +56,8 @@ enum MENU_IDS {
 	MENU_ID_SCALE_3X,
 	MENU_ID_SCALE_4X,
 	MENU_ID_FULLSCREEN,
-	MENU_ID_CRT_FILTER,
+	MENU_ID_CONFIG_CRT,
+	MENU_ID_CONFIG_SOUND,
 	MENU_ID_SCREENSHOT,
 };
 
@@ -110,7 +109,8 @@ static void initMenus() {
 	AppendMenuA(fileMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuA(fileMenu, MF_STRING, MENU_ID_FILE_EXIT, "Exit");
 
-	AppendMenuA(configMenu, MF_STRING, MENU_ID_CONFIG_CONTROLLERS, "Configure Controllers");
+	AppendMenuA(configMenu, MF_STRING, MENU_ID_CONFIG_CONTROLLERS, "Configure Controllers...");
+	AppendMenuA(configMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuA(configMenu, MF_POPUP, (UINT_PTR)scaleMenu, "Screen Scale");
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_1X, "1x");
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_2X, "2x");
@@ -118,7 +118,9 @@ static void initMenus() {
 	AppendMenuA(scaleMenu, MF_STRING, MENU_ID_SCALE_4X, "4x");
 	CheckMenuRadioItem(scaleMenu, MENU_ID_SCALE_1X, MENU_ID_SCALE_4X, MENU_ID_SCALE_1X + DEFAULT_SCREEN_SCALE - 1, MF_BYCOMMAND);
 	AppendMenuA(configMenu, MF_STRING, MENU_ID_FULLSCREEN, "Fullscreen\tF11");
-	AppendMenuA(configMenu, MF_STRING, MENU_ID_CRT_FILTER, "CRT Filter");
+	AppendMenuA(configMenu, MF_STRING, MENU_ID_CONFIG_CRT, "Configure CRT Filter...");
+	AppendMenuA(configMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenuA(configMenu, MF_STRING, MENU_ID_CONFIG_SOUND, "Configure Sound...");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)fileMenu, "File");
 	AppendMenuA(menuBar, MF_POPUP, (UINT_PTR)configMenu, "Config");
 
@@ -194,6 +196,25 @@ SDL_Window* getWindow() {
 	return window;
 }
 
+void setCrtFilterEnabled(bool enabled) {
+	struct ApplicationState* appState = getGlobalApplicationState();
+	if (appState == NULL) { return; }
+	appState->options.crtFilterEnabled = enabled;
+	setScreenShader(appState->screen, enabled ? SCREEN_SHADER_CRT : SCREEN_SHADER_NORMAL);
+}
+
+void updateMenusFromApplicationState() {
+	struct ApplicationState* appState = getGlobalApplicationState();
+	if (appState == NULL) { return; }
+	if (appState->options.screenScale < 1 || appState->options.screenScale > 4) { 
+		printf("Warning: Invalid screen scale %d, using 1x instead.\n", appState->options.screenScale);
+		appState->options.screenScale = 1; 
+	} else {
+		CheckMenuRadioItem(scaleMenu, MENU_ID_SCALE_1X, MENU_ID_SCALE_4X, MENU_ID_SCALE_1X + appState->options.screenScale - 1, MF_BYCOMMAND);
+	}
+	setWindowScale(appState->options.screenScale);
+}
+
 void exitWindow() {
 	SDL_DestroyWindow(window);
 	SDL_Quit();
@@ -239,15 +260,15 @@ static int loadSavestateDialog(HWND owner, char *output, DWORD output_len) {
 // Save a screenshot, with the CRT filter if it's on, and show a thumbnail of it (or say it failed) on screen
 static void screenshot() {
 	int width, height;
-	uint8_t* rgb = readScreenPixels(pairedScreen, crtFilterEnabled, &width, &height);
+	uint8_t* rgb = readScreenPixels(getGlobalApplicationState()->screen, getGlobalApplicationState()->options.crtFilterEnabled, &width, &height);
 	char path[MAX_SCREENSHOT_PATH_LENGTH];
 	if (rgb != NULL && saveScreenshot(rgb, width, height, path, sizeof(path))) {
 		printf("Screenshot saved: %s\n", path);
-		overlayShowMessage(pairedOverlay, "Screenshot saved");
-		overlayShowThumbnail(pairedOverlay, rgb, width, height);
+		overlayShowMessage(getGlobalApplicationState()->overlay, "Screenshot saved");
+		overlayShowThumbnail(getGlobalApplicationState()->overlay, rgb, width, height);
 	}
 	else {
-		overlayShowMessage(pairedOverlay, "Failed to save screenshot");
+		overlayShowMessage(getGlobalApplicationState()->overlay, "Failed to save screenshot");
 	}
 	free(rgb);
 }
@@ -275,11 +296,11 @@ void handleMenuEvents(SDL_Event e) {
 							printf("Error: Failed to load ROM.\n");
 							break;
 						}
-						NES_resetConsoleState(pairedConsole);
+						NES_resetConsoleState(getGlobalApplicationState()->console);
 						NES_clearHistory();
 						struct Cartridge* game_cart = NES_createCartridgeFromBuffer(rom_data);
 						free(rom_data);
-						if (NES_insertCartridge(pairedConsole, game_cart) == 1) {
+						if (NES_insertCartridge(getGlobalApplicationState()->console, game_cart) == 1) {
 							printf("Error: Failed to insert cartridge.\n");
 							break;
 						}
@@ -293,36 +314,36 @@ void handleMenuEvents(SDL_Event e) {
 					case MENU_ID_SAVE_SAVESLOT_6: case MENU_ID_SAVE_SAVESLOT_7: case MENU_ID_SAVE_SAVESLOT_8: case MENU_ID_SAVE_SAVESLOT_9: case MENU_ID_SAVE_SAVESLOT_10: {
 						int slot = LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_SAVE_SAVESLOT_1;
 						char message[MAX_OVERLAY_TEXT_LENGTH];
-						if (NES_saveSavestateSlot(pairedConsole, slot) == 0) { SDL_snprintf(message, sizeof(message), "Saved to slot %d", slot + 1); }
+						if (NES_saveSavestateSlot(getGlobalApplicationState()->console, slot) == 0) { SDL_snprintf(message, sizeof(message), "Saved to slot %d", slot + 1); }
 						else { SDL_snprintf(message, sizeof(message), "Failed to save to slot %d", slot + 1); }
-						overlayShowMessage(pairedOverlay, message);
+						overlayShowMessage(getGlobalApplicationState()->overlay, message);
 						break;
 					}
 					case MENU_ID_SAVE_SAVESLOT_FILE: {
 						char buffer[MAX_SAVESTATE_FILE_PATH_LENGTH];
 						saveSavestateDialog(getHWND(), buffer, MAX_SAVESTATE_FILE_PATH_LENGTH);
 						if (buffer[0] == '\0') { break; }
-						if (NES_saveSavestateToFile(pairedConsole, buffer) == 0) { overlayShowMessage(pairedOverlay, "Savestate saved"); }
-						else { overlayShowMessage(pairedOverlay, "Failed to save savestate"); }
+						if (NES_saveSavestateToFile(getGlobalApplicationState()->console, buffer) == 0) { overlayShowMessage(getGlobalApplicationState()->overlay, "Savestate saved"); }
+						else { overlayShowMessage(getGlobalApplicationState()->overlay, "Failed to save savestate"); }
 						break;
 					}
 					case MENU_ID_LOAD_SAVESLOT_FILE: {
 						char buffer[MAX_SAVESTATE_FILE_PATH_LENGTH];
 						loadSavestateDialog(getHWND(), buffer, MAX_SAVESTATE_FILE_PATH_LENGTH);
 						if (buffer[0] == '\0') { break; }
-						struct NES_Savestate* savestate = NES_loadSavestateFromFile(pairedConsole, buffer);
+						struct NES_Savestate* savestate = NES_loadSavestateFromFile(getGlobalApplicationState()->console, buffer);
 						if (savestate == NULL) {
 							printf("Error: Failed to load savestate.\n");
-							overlayShowMessage(pairedOverlay, "Failed to load savestate");
+							overlayShowMessage(getGlobalApplicationState()->overlay, "Failed to load savestate");
 							break;
 						}
 						// Reading the file only builds the savestate. Apply it to the console, then free it either way
-						if (NES_loadSavestate(pairedConsole, savestate) == 0) {
-							overlayShowMessage(pairedOverlay, "Savestate loaded");
+						if (NES_loadSavestate(getGlobalApplicationState()->console, savestate) == 0) {
+							overlayShowMessage(getGlobalApplicationState()->overlay, "Savestate loaded");
 						}
 						else {
 							printf("Error: Failed to load savestate.\n");
-							overlayShowMessage(pairedOverlay, "Failed to load savestate");
+							overlayShowMessage(getGlobalApplicationState()->overlay, "Failed to load savestate");
 						}
 						NES_freeSavestate(savestate);
 						break;
@@ -331,33 +352,29 @@ void handleMenuEvents(SDL_Event e) {
 					case MENU_ID_LOAD_SAVESLOT_6: case MENU_ID_LOAD_SAVESLOT_7: case MENU_ID_LOAD_SAVESLOT_8: case MENU_ID_LOAD_SAVESLOT_9: case MENU_ID_LOAD_SAVESLOT_10: {
 						int slot = LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_LOAD_SAVESLOT_1;
 						char message[MAX_OVERLAY_TEXT_LENGTH];
-						if (NES_loadSavestateSlot(pairedConsole, slot) == 0) { SDL_snprintf(message, sizeof(message), "Loaded slot %d", slot + 1); }
+						if (NES_loadSavestateSlot(getGlobalApplicationState()->console, slot) == 0) { SDL_snprintf(message, sizeof(message), "Loaded slot %d", slot + 1); }
 						else { SDL_snprintf(message, sizeof(message), "Failed to load slot %d", slot + 1); }
-						overlayShowMessage(pairedOverlay, message);
+						overlayShowMessage(getGlobalApplicationState()->overlay, message);
 						break;
 					}
 					case MENU_ID_CONFIG_CONTROLLERS:
 						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_CONTROLLERS), getHWND(), (DLGPROC)getConfigControllersDialogProc());
 						break;
-					case MENU_ID_SCALE_1X:
-						setWindowScale(1);
+					case MENU_ID_SCALE_1X: case MENU_ID_SCALE_2X: case MENU_ID_SCALE_3X: case MENU_ID_SCALE_4X: {
+						int scale = LOWORD(e.syswm.msg->msg.win.wParam) - MENU_ID_SCALE_1X + 1;
+						setWindowScale(scale);
+						getGlobalApplicationState()->options.screenScale = scale;
+						saveApplicationOptions(getGlobalApplicationState());
 						break;
-					case MENU_ID_SCALE_2X:
-						setWindowScale(2);
-						break;
-					case MENU_ID_SCALE_3X:
-						setWindowScale(3);
-						break;
-					case MENU_ID_SCALE_4X:
-						setWindowScale(4);
-						break;
+					}
 					case MENU_ID_FULLSCREEN:
 						setFullscreen(true);
 						break;
-					case MENU_ID_CRT_FILTER:
-						crtFilterEnabled = !crtFilterEnabled;
-						setScreenShader(pairedScreen, crtFilterEnabled ? SCREEN_SHADER_CRT : SCREEN_SHADER_NORMAL);
-						CheckMenuItem(configMenu, MENU_ID_CRT_FILTER, MF_BYCOMMAND | (crtFilterEnabled ? MF_CHECKED : MF_UNCHECKED));
+					case MENU_ID_CONFIG_CRT:
+						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_CRT), getHWND(), (DLGPROC)getConfigCrtDialogProc());
+						break;
+					case MENU_ID_CONFIG_SOUND:
+						DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(ID_DIALOG_CONFIGURE_SOUND), getHWND(), (DLGPROC)getConfigSoundDialogProc());
 						break;
 					case MENU_ID_SCREENSHOT:
 						screenshot();
@@ -377,22 +394,4 @@ void handleMenuEvents(SDL_Event e) {
 		default:
 			break;
 	}
-}
-
-void pairConsoleToWindow(struct NES_Console *console) {
-	pairedConsole = console;
-}
-
-void pairControllersToWindow(struct Controller* player1, struct Controller* player2) {
-	pairedControllers[0] = player1;
-	pairedControllers[1] = player2;
-	pairControllersToConfigControllersDialog(player1, player2);
-}
-
-void pairOverlayToWindow(struct Overlay* overlay) {
-	pairedOverlay = overlay;
-}
-
-void pairScreenToWindow(struct Screen* screen) {
-	pairedScreen = screen;
 }

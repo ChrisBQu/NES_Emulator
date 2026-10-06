@@ -1,6 +1,6 @@
 #include "Overlay.h"
 #include "OpenGL.h"
-#include "../Screen.h"
+#include "Screen.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
